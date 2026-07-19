@@ -63,7 +63,7 @@ This repo is a working demonstration of that crossing, built to show what I'd ac
 ## Quickstart
 
 ```bash
-git clone https://github.com/<you>/surgical-fhir-pipeline
+git clone https://github.com/smahanti8/surgical-fhir-pipeline
 cd surgical-fhir-pipeline
 pip install -r requirements.txt
 
