@@ -1,0 +1,17 @@
+[project]
+name = "surgical-fhir-pipeline"
+version = "0.1.0"
+description = "Synthetic robotic-assisted surgery telemetry -> FHIR R4B interoperability pipeline"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
