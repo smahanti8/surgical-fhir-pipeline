@@ -1,0 +1,38 @@
+MIT License
+
+Copyright (c) 2026 Subha <FULL NAME — fill this in before pushing>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+NOTE ON CLINICAL CONTENT
+
+This software is a demonstration of healthcare interoperability engineering.
+It is NOT a medical device, NOT clinically validated, and MUST NOT be used in
+patient care.
+
+All data is synthetic. No protected health information (PHI) is used or
+included.
+
+SNOMED CT is licensed content owned by SNOMED International, available in
+member territories via a UMLS licence. LOINC is used under the LOINC licence.
+Codes appear here only as identifiers for interoperability demonstration.
+Bindings marked PROVISIONAL in terminology.py are developer-asserted and have
+NOT been validated against an authoritative terminology release.
