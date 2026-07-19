@@ -508,11 +508,21 @@ def map_case(case: SurgicalCase, max_samples: int | None = 40) -> MappingResult:
     Ordering matters: Procedure is mapped first because an unmapped procedure
     code invalidates the whole case. Emitting Observations for a case whose
     Procedure was dropped would leave orphan vitals referencing a
-    non-existent Encounter.
+    non-existent Encounter — a referential integrity break that a receiving
+    system would either reject or, worse, accept.
     """
     proc_res = map_procedure(case)
     if proc_res.errors:
-        return proc_res
+        # Case is not exchangeable. Return issues ONLY — explicitly discarding
+        # any Procedure that was already constructed before the error was
+        # detected. (This line is here because the first version of this file
+        # returned `proc_res` directly, which leaked a Procedure resource whose
+        # subject/encounter references pointed at a Patient and Encounter that
+        # were never emitted. Caught by the report reconciling to 22 Procedures
+        # against 20 Patients. Orphan references are exactly the failure this
+        # function exists to prevent, and it still shipped in v1 — which is why
+        # the invariant is now asserted in tests rather than trusted to prose.)
+        return MappingResult(resources=[], issues=proc_res.issues)
 
     result = MappingResult()
     result.merge(map_patient(case))
