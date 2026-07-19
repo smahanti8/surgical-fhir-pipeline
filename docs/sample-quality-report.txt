@@ -1,0 +1,40 @@
+====================================================================
+  SURGICAL -> FHIR PIPELINE :: DATA QUALITY REPORT
+====================================================================
+
+  Cases ingested        : 25
+  Cases exchangeable    : 20 (80.0%)
+  Cases dropped         : 5
+  FHIR resources out    : 953
+
+  Resources by type
+  -----------------
+    Device             75
+    Encounter          20
+    Observation       818
+    Patient            20
+    Procedure          20
+
+  Issues by severity
+  ------------------
+    error               5
+    warning            53
+    info               26
+
+  Top degraded elements
+  ---------------------
+    Procedure.code                                 25
+    Observation                                    20
+    Observation.code                               18
+    Procedure.performer.actor.identifier            9
+    Patient.gender                                  3
+    Procedure.status                                3
+    Observation.value                               3
+    Procedure.bodySite                              2
+
+  Terminology binding trust
+  -------------------------
+    verified   : 5/11
+    provisional: 6/11   <-- NOT clinically safe without terminology-server validation
+
+====================================================================
