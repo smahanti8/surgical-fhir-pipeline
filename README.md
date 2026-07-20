@@ -138,29 +138,9 @@ Related: unit handling. `37` is a normal temperature or a hypothermic emergency 
 
 ---
 
-## A bug I shipped and what it taught me
+## Design decisions
 
-The first version reconciled to **22 Procedures against 20 Patients.**
-
-`map_procedure()` built the Procedure *before* the laterality check ran. When the check raised, `map_case()` returned that result object early — with the Procedure still attached. Two orphan Procedures went out referencing a Patient and Encounter that were never created. A receiving FHIR server would either reject the bundle or, worse, accept it.
-
-The function had a docstring explicitly claiming to prevent this.
-
-The fix was three lines. The lesson was the quality report: **the orphan was only visible because the pipeline counts its own output by resource type and I looked at the numbers.** Referential integrity is now a test (`test_referential_integrity_no_orphan_resources`), not a comment.
-
-This is why the report is a first-class deliverable rather than a nice-to-have. Prose does not enforce invariants.
-
----
-
-## Design decisions worth arguing about
-
-| Decision | Rationale | The counter-argument |
-|---|---|---|
-| Drop cases on unmapped code | Uncoded clinical data is worse than absent data | You're throwing away 8% of surgical volume; a registry might prefer text-coded records to none |
-| Drop on missing laterality | Wrong-site-surgery-class defect | Arguably over-aggressive — could emit with a `dataAbsentReason` on `bodySite` |
-| Transaction Bundle uses `PUT` not `POST` | Idempotent. Retries and backfills are *normal* in health integration; a non-idempotent loader creates duplicate clinical records | Requires client-assigned IDs, which some servers resist |
-| Search raises on unsupported params | Silently ignoring a filter is how a client shows another patient's data | Stricter than most real servers |
-| In-memory store, not HAPI | The value here is the mapping + governance layer; rewriting a FHIR server would be the wrong instinct | Not production-representative |
+Every decision worth arguing about — including the orphan-Procedure bug I shipped and what it changed — lives in the decision log: [DECISIONS.md](DECISIONS.md).
 
 ---
 
