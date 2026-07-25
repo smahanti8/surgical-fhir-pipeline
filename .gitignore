@@ -6,3 +6,4 @@ venv/
 output/
 .DS_Store
 notes/
+.claude/settings.local.json
