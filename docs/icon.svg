@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f1420"/>
+  <rect x="40" y="40" width="432" height="432" rx="72" fill="#171e2e"/>
+  <!-- medical cross -->
+  <g fill="#4f8cff">
+    <rect x="226" y="120" width="60" height="272" rx="14"/>
+    <rect x="120" y="226" width="272" height="60" rx="14"/>
+  </g>
+  <!-- pulse line -->
+  <path d="M96 300 h70 l26 -70 l34 150 l30 -110 l24 40 h106"
+        fill="none" stroke="#37c884" stroke-width="16"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

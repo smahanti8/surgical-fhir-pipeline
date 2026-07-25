@@ -1,66 +1,120 @@
-# surgical-fhir-pipeline
+# Surgical RAS → FHIR R4B Interoperability Pipeline
 
-**Maps synthetic robotic-assisted surgery (RAS) telemetry to FHIR R4B and exposes it over a conformant REST API — and reports honestly on everything that breaks along the way.**
+![CI](https://github.com/smahanti8/surgical-fhir-pipeline/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![FHIR](https://img.shields.io/badge/FHIR-R4B-purple)
+![Tests](https://img.shields.io/badge/tests-19%20passing-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-```
-Cases ingested        : 25
-Cases exchangeable    : 20 (80.0%)
-Cases dropped         : 5
-FHIR resources out    : 953
+> A transparent, governance-first pipeline that maps **robotic-assisted surgery (RAS) telemetry** to **FHIR R4B** clinical exchange format — and reports honestly on what breaks along the way.
 
-Terminology binding trust
-  verified   : 5/11
-  provisional: 6/11   <-- NOT clinically safe without terminology-server validation
-```
-
-That 80% is the point of this repo. A pipeline that reports 100% is either being fed clean data or lying to you.
+**[▶ Live Interactive Demo](https://smahanti8.github.io/surgical-fhir-pipeline/)** &nbsp;·&nbsp; [Architecture decisions](DECISIONS.md) &nbsp;·&nbsp; [Sample quality report](docs/sample-quality-report.txt)
 
 ---
 
-## Why this exists
+## At a glance
 
-Surgical robotics platforms generate rich data — procedure telemetry, instrument events, device inventory, physiologic streams. Almost none of it is exchangeable as emitted. It's shaped for engineering: high-frequency, denormalised, nullable, and coded in a **local vocabulary that no receiving system has ever heard of**.
+| Metric | Value |
+|--------|-------|
+| Cases ingested | 25 |
+| Cases exchangeable | **20 (80%)** |
+| Cases dropped | 5 |
+| FHIR resources generated | 953 |
+| Terminology bindings — verified | 5 / 11 |
+| Terminology bindings — provisional | 6 / 11 ⚠️ |
 
-Getting it into an EHR, a surgical registry, or a post-market surveillance system means crossing into FHIR. That crossing is where healthcare interoperability actually lives, and it is mostly not a technical problem — it's a **semantics and governance** problem.
+> A pipeline that reports 100% is either being fed clean data or **lying to you.**
+> The 80% is the point.
 
-This repo is a working demonstration of that crossing, built to show what I'd actually own as a technical leader in a medtech/health-IT org: not "can you emit JSON with `resourceType`," but *do you know what gets destroyed on the way, and do you refuse to hide it.*
+---
 
-**No PHI. No real patient data. No proprietary schema.** Everything here is synthetic and vendor-neutral by construction — see [Constraints](#constraints-and-what-they-taught-me).
+## What this demonstrates
+
+```mermaid
+flowchart TD
+    subgraph SRC["OR Platform (vendor-shaped)"]
+        A["SurgicalCase\nlocal codes · MRN · laterality?\nDeviceRecords · Telemetry · PhysioSamples"]
+    end
+
+    A --> TERM
+
+    subgraph INTEROP["Interoperability Layer"]
+        TERM["terminology.py\nLocal → SNOMED / LOINC / UCUM\n+ VERIFIED / PROVISIONAL trust status"]
+        MAP["mapping.py\nSource → FHIR\nEvery lossy decision logged as MappingIssue"]
+        TERM --> MAP
+    end
+
+    MAP --> G1
+
+    subgraph GATES["Quality Gates — drop, don't degrade"]
+        G1{Procedure code\nmappable?}
+        G2{Laterality\npresent?}
+        G3{Sensor reading\nin range?}
+        G4["Downsample telemetry\n72,000 → ~40 / case"]
+    end
+
+    G1 -- "No: unmapped code\n~8% of cases" --> DROP["❌ Case DROPPED\ncounted · reported"]
+    G1 -- Yes --> G2
+    G2 -- "No: sided procedure\nno laterality" --> DROP
+    G2 -- Yes --> G3
+    G3 -- "No: e.g. SpO₂ 4%" --> ERR["⚠️ entered-in-error\nvalue removed · failure kept"]
+    G3 -- Yes --> G4
+    ERR --> G4
+    G4 --> BUNDLE
+
+    subgraph OUT["FHIR R4B Output"]
+        BUNDLE["Transaction Bundle — idempotent PUT\nPatient · Encounter · Procedure\nDevice · Observation"]
+    end
+
+    BUNDLE --> API["FastAPI FHIR REST API\n/metadata · /Procedure · /Observation"]
+    BUNDLE --> QR["📊 Quality Report\n20/25 exchangeable · 5/11 bindings verified"]
+    DROP --> QR
+
+    style DROP fill:#f0605d,color:#fff,stroke:#c0392b
+    style ERR fill:#f0a83c,color:#000,stroke:#e67e22
+    style QR fill:#2dd4a0,color:#000,stroke:#1a9e76
+```
+
+---
+
+## Why this is harder than it looks
+
+Surgical platforms emit data shaped for **engineering**, not exchange — high-frequency, denormalised, coded in a local vocabulary no receiving system has heard of. Getting it to an EHR, a surgical registry, or a post-market surveillance system means crossing into FHIR.
+
+That crossing is mostly not a technical problem. It is a **semantics and governance problem**.
+
+### The seven real failure modes this pipeline hits
+
+| # | Failure | Category | Decision |
+|---|---------|----------|----------|
+| 1 | Local procedure codes lose robotic approach in SNOMED mapping | Semantics | Map to parent, flag `PROVISIONAL`, preserve intent in `code.text` |
+| 2 | No SNOMED licence — provisional bindings can't be silently promoted | Governance | Every binding carries a trust status; a test keeps procedure bindings provisional |
+| 3 | Estimated blood loss has no published LOINC code | Validation | Emit under a local URI — fail loudly, not silently wrong |
+| 4 | Unmapped procedure code (~8% of cases) | Completeness | **Drop the case** — uncoded is invisible to queries, worse than absent |
+| 5 | Missing laterality on a sided procedure | Patient safety | **Drop the case** — wrong-site-surgery-class defect |
+| 6 | 1 Hz telemetry × 4 h = 72,000 Observations / case | Architecture | Downsample to ~40; FHIR is an exchange format, not a TSDB |
+| 7 | Sensor artefacts + ambiguous units | Data quality | Out-of-range → `entered-in-error`; unknown units raise immediately |
+
+See [`DECISIONS.md`](DECISIONS.md) for the full rationale and counter-arguments.
 
 ---
 
 ## Architecture
 
 ```
-  Source system (vendor-shaped)          Interop layer                FHIR R4B
-  ─────────────────────────────          ─────────────                ────────
-  SurgicalCase                    ┌──> terminology.py  ──┐            Patient
-    ├─ procedure_local_code       │      concept map     │            Encounter
-    ├─ patient_mrn                │      + trust status  │            Procedure
-    ├─ laterality?                │                      ├──────────> Device
-    ├─ DeviceRecord[]        ─────┤   mapping.py         │            Observation
-    ├─ TelemetryEvent[]           │      + MappingIssue  │                │
-    └─ PhysioSample[]             │                      │                v
-                                  └──> quality.py     ───┘        transaction Bundle
-                                         report                          │
-                                                                         v
-                                                                   FastAPI FHIR API
-                                                                   /metadata
-                                                                   /Procedure?...
+src/surgical_fhir/
+├── source_schema.py   # Vendor-side data model — deliberately not FHIR
+├── generator.py       # Synthetic cases with calibrated defect injection
+├── terminology.py     # Local → SNOMED/LOINC/UCUM, each with a trust status
+├── mapping.py         # Source → FHIR; every lossy decision is a MappingIssue
+├── quality.py         # Governance artefact — % exchangeable, breakdowns, samples
+├── store.py           # In-memory FHIR store; raises on unsupported search params
+└── api.py             # Read-only FastAPI FHIR REST surface + CapabilityStatement
 ```
-
-| Module | Responsibility |
-|---|---|
-| `source_schema.py` | What the OR platform emits. Deliberately not FHIR. |
-| `generator.py` | Synthetic cases **with realistic defects** injected. |
-| `terminology.py` | Local → SNOMED/LOINC/UCUM bindings, each with a trust status. |
-| `mapping.py` | Source → FHIR. Records every lossy decision as a `MappingIssue`. |
-| `quality.py` | The governance artefact. What % is exchangeable, and where it degrades. |
-| `store.py` / `api.py` | Read-only FHIR REST surface + CapabilityStatement. |
 
 ---
 
-## Quickstart
+## Quick start
 
 ```bash
 git clone https://github.com/smahanti8/surgical-fhir-pipeline
@@ -73,95 +127,42 @@ PYTHONPATH=src python scripts/generate.py -n 25
 # Serve the FHIR API
 PYTHONPATH=src uvicorn surgical_fhir.api:app --reload
 
-# Tests (19)
+# Run all 19 tests
 PYTHONPATH=src pytest tests/ -q
 ```
 
 ```bash
-curl localhost:8000/metadata                        # CapabilityStatement
-curl localhost:8000/Procedure                       # searchset Bundle
+# Live endpoints
+curl localhost:8000/metadata                          # CapabilityStatement
+curl localhost:8000/Procedure                         # searchset Bundle
 curl "localhost:8000/Observation?patient=<id>&code=8867-4"
-curl localhost:8000/quality-report                  # the governance artefact
-curl "localhost:8000/Procedure?performer=Dr-X"      # -> OperationOutcome, 400
+curl localhost:8000/quality-report                    # governance artefact
+curl "localhost:8000/Procedure?performer=Dr-X"        # → OperationOutcome 400
 ```
-
----
-
-## The seven interoperability problems this pipeline hits
-
-Each of these is a real failure mode. Each has a decision behind it, and I'd rather defend the decision than hide the problem.
-
-### 1. Local procedure codes have no SNOMED home
-
-The platform emits `RAS-CHOL-01`. FHIR wants a SNOMED CT concept. I map it to `45595009 | Cholecystectomy` — **and that mapping is lossy in a way that would fail a surgical registry.** It drops both the minimally-invasive approach *and* the robotic assistance. In SNOMED those are frequently post-coordinated expressions or separate qualifiers, not a pre-coordinated concept.
-
-**Decision:** map to the parent, flag it `PROVISIONAL`, and preserve the full clinical intent in `Procedure.code.text`. The free text is the safety net for what the code destroyed.
-
-### 2. I don't have a SNOMED CT licence, and I'm not going to pretend
-
-Every binding in `terminology.py` carries a `BindingStatus`: `VERIFIED` or `PROVISIONAL`.
-
-- **LOINC vital-sign codes → VERIFIED.** Freely published, stable, canonical in US Core. I'll stand behind them.
-- **SNOMED procedure codes → PROVISIONAL.** Plausible, developer-asserted, unvalidated against a licensed release.
-
-In production these bindings are authored by a **clinical informaticist against a terminology server** (Snowstorm, Ontoserver) and reviewed — not written by the pipeline engineer at 11pm. A repo that silently ships developer-guessed SNOMED codes as fact is modelling the exact behaviour that produces unusable registry data.
-
-There's a test asserting the procedure bindings stay marked provisional. If it ever fails, someone promoted a binding without doing the work.
-
-### 3. Estimated blood loss: I couldn't find a LOINC code, so I didn't invent one
-
-EBL is emitted with a **local code** under `urn:local:or-metrics`, not a fabricated LOINC. It will fail a US Core validator — loudly, which is correct. A made-up LOINC would pass validation and be wrong, which is the worst of both worlds.
-
-### 4. Unmapped code → drop the case, don't degrade it
-
-The generator emits `RAS-COLEC-99` (~8% of cases) — a procedure profile the device team shipped without telling informatics. **The single most common interop failure in the field.**
-
-The tempting move is a text-only `CodeableConcept`. That's wrong: an uncoded procedure in a clinical record is worse than an absent one, because it's *invisible to every query that matters* while still looking like data. The case is dropped, counted, and reported.
-
-### 5. Missing laterality is a wrong-site-surgery-class defect
-
-Inguinal hernia repair with no laterality. SNOMED code carries no side; it must ride on `Procedure.bodySite`.
-
-**Decision:** ERROR, drop the case. Defaulting laterality is unthinkable. Emitting without it hands a receiving system a record it cannot safely act on.
-
-### 6. FHIR is not a time-series store
-
-1 Hz telemetry × 4 hours × 5 metrics = **72,000 Observations for one case.** Mapping device telemetry 1:1 to FHIR resources is the classic architectural mistake here.
-
-FHIR is an *exchange* format. In production the stream lives in a time-series DB and FHIR carries summaries or `SampledData`. Here I downsample to 40/case and say so in the report. Knowing what *not* to put in FHIR is the senior judgement.
-
-### 7. Sensor artefacts must never enter a chart as normal readings
-
-A pulse-ox glitch reports SpO₂ of 4%. Bounds-checked values outside physiologic range are emitted as `status: entered-in-error` with a `dataAbsentReason` and **no value** — the record of the failure survives, the bad number doesn't.
-
-Related: unit handling. `37` is a normal temperature or a hypothermic emergency depending on whether you meant `Cel` or `[degF]`, and nothing in the JSON tells you. Units go through an explicit UCUM map that raises on unknown input.
-
----
-
-## Design decisions
-
-Every decision worth arguing about — including the orphan-Procedure bug I shipped and what it changed — lives in the decision log: [DECISIONS.md](DECISIONS.md).
-
----
-
-## Constraints, and what they taught me
-
-- **No PHI, ever.** Never touching real patient data is not a limitation of this project — it's the discipline the domain demands. The `_pseudonymise()` docstring is explicit that a deterministic MRN hash is **not de-identification**: it's still a linkable identifier under HIPAA Safe Harbor, and it's only defensible here because the input is synthetic. Real de-identification is a separate service with key custody, an audit trail, and expert determination. A test asserts no raw MRN survives into the output.
-- **Vendor-neutral by construction.** No employer's product name, schema, or telemetry format appears anywhere. The source schema is my synthesis of what an OR platform generically emits. If a portfolio repo looks like it leaked a proprietary schema, that's a hiring signal — the wrong one.
-- **R4B, stated plainly.** This uses `fhir.resources.R4B`. R4B is the maintenance release of R4; for Patient / Encounter / Procedure / Device / Observation the R4→R4B differential is immaterial. Saying "R4B" is more accurate than claiming "R4" and hoping nobody checks.
 
 ---
 
 ## What I'd build next
 
-1. **Validate against a real terminology server** (Snowstorm) and promote bindings `PROVISIONAL → VERIFIED` with evidence — turning the honest gap into a closed loop.
-2. **Profile against US Core / a surgical IG**, run the official validator in CI, and let the build fail on conformance regression.
-3. **Swap the in-memory store for HAPI FHIR** and prove the bundles actually load into a real server.
-4. **`$everything` and a Provenance resource** per case — auditability is the thing regulated customers ask about first.
-5. **Time-series split:** telemetry to a TSDB, FHIR `SampledData` for the exchange summary.
+1. **Validate against a real terminology server** (Snowstorm) — promote `PROVISIONAL → VERIFIED` with evidence
+2. **Profile against US Core / a surgical IG** and run the official validator in CI
+3. **Swap in-memory store for HAPI FHIR** and prove the bundles load into a real server
+4. **`$everything` + Provenance resources** per case — the first thing regulated customers ask about
+5. **Time-series split** — telemetry to a TSDB, FHIR `SampledData` for the exchange summary
+
+---
+
+## Constraints by design
+
+- **No PHI. No real patient data.** Everything is synthetic and vendor-neutral. A test asserts no raw MRN survives into output.
+- **No proprietary schema.** The source model is a synthesis of what an OR platform *generically* emits — no employer's product appears anywhere.
+- **FHIR R4B, stated plainly.** Uses `fhir.resources.R4B`. Saying "R4B" is more accurate than claiming "R4" and hoping nobody checks.
 
 ---
 
 ## License
 
-MIT. Synthetic data only. SNOMED CT is licensed content (SNOMED International; free in member territories via UMLS). LOINC is used under the LOINC licence. Codes here are reproduced as identifiers for interoperability demonstration — the ordinary use of a code system in an implementation — and the provisional ones must not be treated as clinically validated.
+MIT. Synthetic data only.
+SNOMED CT is licensed content (SNOMED International; free in member territories via UMLS).
+LOINC is used under the LOINC licence.
+Codes here are reproduced as identifiers for interoperability demonstration — the provisional ones must not be treated as clinically validated.

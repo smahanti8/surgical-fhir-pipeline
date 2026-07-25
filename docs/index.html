@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Surgical RAS → FHIR Interoperability Pipeline</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#4f8cff">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#0b0f1a;--panel:#131929;--panel2:#1a2238;--ink:#e8edf7;--muted:#7b8db0;
+  --line:#1e2d4a;--accent:#4f8cff;--good:#2dd4a0;--warn:#f0a83c;--bad:#f0605d;
+  --chip:#1a2a45;--border-r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;min-height:100vh}
+a{color:var(--accent)}
+
+/* ── Header ── */
+header{
+  background:linear-gradient(135deg,#0f1e38 0%,#0b0f1a 100%);
+  border-bottom:1px solid var(--line);padding:28px 24px 20px;
+}
+.header-inner{max-width:1100px;margin:0 auto;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.brand h1{font-size:1.35rem;font-weight:700;letter-spacing:-.01em}
+.brand h1 span{color:var(--accent)}
+.brand p{color:var(--muted);font-size:.88rem;margin-top:4px;max-width:540px}
+.kpi-row{display:flex;gap:10px;flex-wrap:wrap}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--border-r);padding:10px 16px;text-align:center;min-width:96px}
+.kpi .v{font-size:1.5rem;font-weight:800;line-height:1}
+.kpi .l{font-size:.72rem;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.kpi.good .v{color:var(--good)} .kpi.bad .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)}
+
+/* ── Nav ── */
+nav{
+  position:sticky;top:0;z-index:10;background:rgba(11,15,26,.93);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+  display:flex;gap:2px;overflow-x:auto;padding:8px 20px;
+}
+nav button{
+  background:none;border:0;color:var(--muted);font:inherit;font-size:.88rem;
+  font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;
+  transition:.15s;
+}
+nav button:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+nav button.active{color:#fff;background:var(--accent)}
+
+/* ── Layout ── */
+.wrap{max-width:1100px;margin:0 auto;padding:28px 20px 60px}
+section{display:none;animation:fadein .25s ease}
+section.active{display:block}
+@keyframes fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+h2{font-size:1.1rem;font-weight:700;margin-bottom:14px;color:var(--ink)}
+h3{font-size:.95rem;font-weight:700;margin-bottom:8px}
+p{color:#c5cfe8;font-size:.92rem}
+.muted{color:var(--muted)}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--border-r);padding:18px 20px;margin-bottom:14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:800px){.two,.three{grid-template-columns:1fr}}
+
+code{background:#070c18;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-family:Consolas,monospace;font-size:.85em;color:#80aaff}
+pre{background:#070c18;border:1px solid var(--line);border-radius:8px;padding:14px;overflow-x:auto;font-size:.82rem;line-height:1.7;color:#9eb8e8}
+.tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:.75rem;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:3px 9px;font-size:.75rem;font-weight:700}
+.badge.good{color:var(--good);border-color:rgba(45,212,160,.3)}
+.badge.bad{color:var(--bad);border-color:rgba(240,96,93,.3)}
+.badge.warn{color:var(--warn);border-color:rgba(240,168,60,.3)}
+
+/* ── Quality bar ── */
+.qbar-wrap{margin:8px 0}
+.qbar{height:32px;border-radius:8px;display:flex;overflow:hidden;border:1px solid var(--line)}
+.qbar .seg{display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:700;color:#0b0f1a;transition:width .5s ease}
+.seg-good{background:var(--good)} .seg-warn{background:var(--warn)} .seg-bad{background:var(--bad)}
+.qbar-legend{display:flex;gap:16px;margin-top:8px;font-size:.78rem;color:var(--muted)}
+.qbar-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* ── Pipeline flow ── */
+.flow{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:14px;padding:14px 16px;cursor:pointer;border-left:2px solid var(--line);margin-left:16px;transition:.15s;position:relative}
+.step::before{content:"";position:absolute;left:-9px;top:18px;width:16px;height:16px;border-radius:50%;background:var(--panel2);border:2px solid var(--line);transition:.15s}
+.step:hover,.step.open{border-left-color:var(--accent)}
+.step:hover::before,.step.open::before{background:var(--accent);border-color:var(--accent)}
+.step .body h4{font-size:.92rem;margin-bottom:2px}
+.step .body .d{color:var(--muted);font-size:.83rem}
+.step .detail{display:none;margin-top:10px;padding:12px;background:var(--panel2);border-radius:8px;font-size:.85rem;color:#c5cfe8;border:1px solid var(--line)}
+.step.open .detail{display:block}
+.step-num{flex:0 0 28px;height:28px;border-radius:50%;background:var(--chip);border:1px solid var(--line);display:grid;place-items:center;font-size:.78rem;font-weight:700;color:var(--muted);margin-top:2px}
+
+/* ── Failure cards ── */
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.fc-grid{grid-template-columns:1fr}}
+.fc-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--border-r);padding:16px;transition:.15s;cursor:pointer}
+.fc-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.fc-card .fc-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.fc-card .fc-icon{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:1rem;flex:0 0 auto}
+.fc-icon.bad{background:rgba(240,96,93,.15);color:var(--bad)}
+.fc-icon.warn{background:rgba(240,168,60,.15);color:var(--warn)}
+.fc-card h4{font-size:.9rem;margin:0}
+.fc-card .decision{display:none;margin-top:10px;padding:10px;background:var(--panel2);border-radius:8px;font-size:.83rem;color:#c5cfe8;border-left:3px solid var(--accent)}
+.fc-card.open .decision{display:block}
+.fc-card .rationale{font-size:.83rem;color:var(--muted)}
+
+/* ── Pipeline Simulator ── */
+label.fl{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
+select,input[type=text]{width:100%;background:#070c18;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:9px 10px;font:inherit;font-size:.88rem}
+select:focus,input:focus{outline:1px solid var(--accent)}
+.run-btn{width:100%;background:var(--accent);color:#fff;border:0;border-radius:9px;padding:12px;font:inherit;font-weight:700;cursor:pointer;margin-top:14px;font-size:.95rem;transition:.15s}
+.run-btn:hover{filter:brightness(1.12)}
+.result-box{border-radius:var(--border-r);padding:16px;border:1px solid var(--line);min-height:130px;margin-top:0}
+.result-box.good{background:rgba(45,212,160,.07);border-color:rgba(45,212,160,.3)}
+.result-box.warn{background:rgba(240,168,60,.07);border-color:rgba(240,168,60,.3)}
+.result-box.bad{background:rgba(240,96,93,.07);border-color:rgba(240,96,93,.3)}
+.result-box h4{margin-bottom:8px;font-size:.95rem}
+.result-box ul{padding-left:18px;font-size:.84rem;color:#c5cfe8}
+.result-box li{margin-bottom:4px}
+
+/* ── policy toggles ── */
+.policy-row{display:flex;flex-wrap:wrap;gap:18px;margin:14px 0}
+.sw{display:flex;align-items:center;gap:10px;cursor:pointer}
+.sw input{display:none}
+.sw .track{width:40px;height:22px;border-radius:999px;background:var(--chip);border:1px solid var(--line);position:relative;transition:.2s;flex:0 0 auto}
+.sw .track::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:.2s}
+.sw input:checked+.track{background:var(--accent)}
+.sw input:checked+.track::after{transform:translateX(18px);background:#fff}
+.sw .slbl{font-size:.83rem} .sw .slbl b{color:var(--ink)} .sw .slbl span{color:var(--muted);font-size:.76rem;display:block}
+
+/* ── FHIR preview ── */
+.fhir-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.fhir-tab{background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:.8rem;font-weight:700;cursor:pointer;color:var(--muted);transition:.15s}
+.fhir-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.fhir-pane{display:none} .fhir-pane.active{display:block}
+
+/* ── Cohort bar in simulator ── */
+.cbar{height:24px;border-radius:6px;display:flex;overflow:hidden;border:1px solid var(--line);margin:8px 0}
+.cbar .seg{display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:#0b0f1a;transition:width .4s}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <h1>Surgical RAS <span>→ FHIR R4B</span> Interoperability Pipeline</h1>
+      <p>A transparent, governance-first pipeline mapping robotic-assisted surgery telemetry to clinical exchange format — and reporting honestly on what breaks along the way.</p>
+    </div>
+    <div class="kpi-row" id="kpis">
+      <div class="kpi"><div class="v">25</div><div class="l">Cases in</div></div>
+      <div class="kpi good"><div class="v">20</div><div class="l">Exchangeable</div></div>
+      <div class="kpi bad"><div class="v">5</div><div class="l">Dropped</div></div>
+      <div class="kpi"><div class="v">953</div><div class="l">FHIR resources</div></div>
+      <div class="kpi warn"><div class="v">6/11</div><div class="l">Provisional</div></div>
+    </div>
+  </div>
+</header>
+
+<nav id="nav">
+  <button class="active" data-t="overview">Overview</button>
+  <button data-t="pipeline">Pipeline Flow</button>
+  <button data-t="explorer">Policy Explorer</button>
+  <button data-t="failures">Interop Challenges</button>
+  <button data-t="fhir">FHIR Output</button>
+  <button data-t="arch">Architecture</button>
+</nav>
+
+<div class="wrap">
+
+<!-- ══════════════════ OVERVIEW ══════════════════ -->
+<section id="overview" class="active">
+
+  <div class="two">
+    <div>
+      <div class="card">
+        <h3>The problem this solves</h3>
+        <p>Surgical robotics platforms generate rich telemetry — procedure events, device inventory, physiologic streams. Almost none of it is exchangeable as emitted. It arrives shaped for engineering: high-frequency, denormalised, coded in a local vocabulary no receiving system has heard of.</p>
+        <p style="margin-top:10px">Getting it into an EHR, a surgical registry, or a post-market surveillance system means crossing into <strong>FHIR</strong>. That crossing is where healthcare interoperability actually lives — and it is mostly not a technical problem. It is a <strong>semantics and governance problem.</strong></p>
+      </div>
+      <div class="card">
+        <h3>Who this is for</h3>
+        <p style="margin-bottom:8px">This pipeline is built for the person asking:</p>
+        <ul style="padding-left:18px;font-size:.88rem;color:#c5cfe8">
+          <li style="margin-bottom:5px"><strong>Clinical Informaticists</strong> evaluating whether OR platform data can realistically reach a registry</li>
+          <li style="margin-bottom:5px"><strong>Health IT Architects</strong> scoping a medtech interoperability engagement</li>
+          <li><strong>Data Engineers</strong> who need to understand the governance layer, not just the JSON shape</li>
+        </ul>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>Exchangeability — the real metric</h3>
+        <p class="muted" style="font-size:.82rem;margin-bottom:10px">25 synthetic cases processed through all quality gates</p>
+        <div class="qbar-wrap">
+          <div class="qbar">
+            <div class="seg seg-good" style="width:56%">14 clean</div>
+            <div class="seg seg-warn" style="width:24%">6 flagged</div>
+            <div class="seg seg-bad" style="width:20%">5 dropped</div>
+          </div>
+          <div class="qbar-legend">
+            <span><i style="background:var(--good)"></i>Clean (no issues)</span>
+            <span><i style="background:var(--warn)"></i>Exchangeable with warnings</span>
+            <span><i style="background:var(--bad)"></i>Dropped — not exchangeable</span>
+          </div>
+        </div>
+        <p style="margin-top:12px;font-size:.85rem">A pipeline that reports 100% is either being fed clean data or <strong>lying to you.</strong> The 80% is the point — it is an honest measure of what a real OR platform actually produces.</p>
+      </div>
+      <div class="card">
+        <h3>Terminology trust</h3>
+        <p style="font-size:.85rem;margin-bottom:10px">Every code binding carries an explicit trust status. There is no silent promotion of a developer guess to a clinical fact.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px;background:rgba(45,212,160,.07);border:1px solid rgba(45,212,160,.3);border-radius:8px;padding:12px">
+            <div style="font-size:1.3rem;font-weight:800;color:var(--good)">5/11</div>
+            <div style="font-size:.78rem;color:var(--muted);margin-top:2px">VERIFIED</div>
+            <div style="font-size:.78rem;color:#c5cfe8;margin-top:4px">LOINC vital signs — freely published, canonical in US Core</div>
+          </div>
+          <div style="flex:1;min-width:120px;background:rgba(240,168,60,.07);border:1px solid rgba(240,168,60,.3);border-radius:8px;padding:12px">
+            <div style="font-size:1.3rem;font-weight:800;color:var(--warn)">6/11</div>
+            <div style="font-size:.78rem;color:var(--muted);margin-top:2px">PROVISIONAL</div>
+            <div style="font-size:.78rem;color:#c5cfe8;margin-top:4px">SNOMED procedures — plausible, developer-asserted, unvalidated against a terminology server</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>What makes this different from a standard FHIR demo</h3>
+    <div class="three">
+      <div>
+        <div style="font-size:1.4rem;margin-bottom:6px">🚫</div>
+        <h4 style="font-size:.88rem;margin-bottom:4px">Drop, don't degrade</h4>
+        <p style="font-size:.83rem">An unmapped procedure code or missing laterality <strong>drops the case entirely</strong>. Emitting a text-only, uncoded procedure record is worse than absent — it's invisible to every meaningful query while still looking like data.</p>
+      </div>
+      <div>
+        <div style="font-size:1.4rem;margin-bottom:6px">📋</div>
+        <h4 style="font-size:.88rem;margin-bottom:4px">Quality report as first-class output</h4>
+        <p style="font-size:.83rem">The governance artefact is not documentation — it is <strong>a primary deliverable</strong> that enforces referential integrity. An early bug (orphan Procedures) was found only because the report counted resources by type.</p>
+      </div>
+      <div>
+        <div style="font-size:1.4rem;margin-bottom:6px">⚖️</div>
+        <h4 style="font-size:.88rem;margin-bottom:4px">Every decision is arguable</h4>
+        <p style="font-size:.83rem">The pipeline documents the <strong>counter-argument</strong> for every design choice. A registry might prefer text-coded records to none. This is not hidden — it is in <code>DECISIONS.md</code>.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ══════════════════ PIPELINE FLOW ══════════════════ -->
+<section id="pipeline">
+  <h2>Pipeline — end to end</h2>
+  <p class="muted" style="margin-bottom:18px;font-size:.88rem">Click any step to expand the implementation detail and the design rationale.</p>
+  <div class="card" style="padding:20px 24px">
+    <div class="flow" id="flow"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ POLICY EXPLORER ══════════════════ -->
+<section id="explorer">
+  <h2>Governance Policy Explorer</h2>
+  <p class="muted" style="font-size:.88rem;margin-bottom:16px">Configure a case and a governance stance. The engine applies the same rules as <code>mapping.py</code> — <strong>drop, don't degrade</strong> — or shows you what happens when you relax that rule.</p>
+
+  <div class="card" style="margin-bottom:14px">
+    <h3>Policy toggles — flip a rule, watch the cohort move</h3>
+    <div class="policy-row">
+      <label class="sw"><input type="checkbox" id="polUnmapped" checked><span class="track"></span><span class="slbl"><b>Drop on unmapped code</b><span>off → emit text-only CodeableConcept (8% volume recovered, arguably unsafe)</span></span></label>
+      <label class="sw"><input type="checkbox" id="polLat" checked><span class="track"></span><span class="slbl"><b>Drop on missing laterality</b><span>off → emit with dataAbsentReason on bodySite</span></span></label>
+    </div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:6px">25-case cohort · <b id="rateText" style="color:var(--good)"></b></div>
+    <div class="cbar" id="cohortBar"></div>
+    <div class="qbar-legend" style="margin-top:6px">
+      <span><i style="background:var(--good)"></i>Exchangeable (clean)</span>
+      <span><i style="background:var(--warn)"></i>Exchangeable (flagged)</span>
+      <span><i style="background:var(--bad)"></i>Dropped</span>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h3>Configure a case</h3>
+      <label class="fl">Procedure code</label>
+      <select id="proc">
+        <option value="mapped">RAS-CHOL-01 — maps to SNOMED (provisional)</option>
+        <option value="unmapped">RAS-COLEC-99 — no mapping exists</option>
+      </select>
+      <label class="fl">Procedure requires laterality?</label>
+      <select id="latReq"><option value="no">No — not a sided procedure</option><option value="yes">Yes — sided procedure (e.g. inguinal hernia)</option></select>
+      <label class="fl">Laterality value present?</label>
+      <select id="latVal"><option value="yes">Yes — left / right present</option><option value="no">No — absent from source</option></select>
+      <label class="fl">SpO₂ reading (%)</label>
+      <input type="text" id="spo2" value="98">
+      <label class="fl">Temperature unit</label>
+      <select id="unit"><option value="known">Known UCUM unit (Cel / [degF])</option><option value="unknown">Unknown / ambiguous</option></select>
+      <label class="fl">Raw telemetry points</label>
+      <input type="text" id="tele" value="72000">
+      <button class="run-btn" onclick="runSim()">▶ Run through pipeline</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--line);font-size:.88rem;font-weight:700">Pipeline result</div>
+      <div style="padding:14px 16px">
+        <div id="verdict" class="result-box">
+          <h4 class="muted" style="font-size:.88rem">Configure a case and press run</h4>
+          <p style="font-size:.83rem;color:var(--muted);margin-top:6px">The engine will apply the active governance policy and explain every decision.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ INTEROP CHALLENGES ══════════════════ -->
+<section id="failures">
+  <h2>Real interoperability challenges — and the decisions behind them</h2>
+  <p class="muted" style="font-size:.88rem;margin-bottom:16px">These are not edge cases. Each is a failure mode encountered in the field. Click to expand the design decision and the counter-argument.</p>
+  <div class="fc-grid" id="fcgrid"></div>
+</section>
+
+<!-- ══════════════════ FHIR OUTPUT ══════════════════ -->
+<section id="fhir">
+  <h2>FHIR R4B output samples</h2>
+  <p class="muted" style="font-size:.88rem;margin-bottom:16px">Representative resources produced by the pipeline for a clean case. All identifiers are synthetic.</p>
+  <div class="fhir-tabs" id="fhirTabs"></div>
+  <div class="card" style="padding:0">
+    <div id="fhirPanes" style="padding:16px"></div>
+  </div>
+</section>
+
+<!-- ══════════════════ ARCHITECTURE ══════════════════ -->
+<section id="arch">
+  <h2>Architecture</h2>
+  <div class="two">
+    <div>
+      <div class="card">
+        <h3>Module responsibilities</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+          <thead><tr style="color:var(--muted);font-size:.78rem">
+            <th style="text-align:left;padding:6px 0;border-bottom:1px solid var(--line)">Module</th>
+            <th style="text-align:left;padding:6px 0;border-bottom:1px solid var(--line)">Responsibility</th>
+          </tr></thead>
+          <tbody id="modTable"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Key design choices</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+          <thead><tr style="color:var(--muted);font-size:.77rem">
+            <th style="text-align:left;padding:5px 0;border-bottom:1px solid var(--line)">Decision</th>
+            <th style="text-align:left;padding:5px 0;border-bottom:1px solid var(--line)">Rationale</th>
+            <th style="text-align:left;padding:5px 0;border-bottom:1px solid var(--line)">Counter-argument</th>
+          </tr></thead>
+          <tbody id="decTable"></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Data flow</h3>
+        <div id="archDiagram" style="font-family:Consolas,monospace;font-size:.78rem;line-height:2;color:#9eb8e8;white-space:pre-wrap"></div>
+      </div>
+      <div class="card">
+        <h3>What I'd build next</h3>
+        <ol style="padding-left:18px;font-size:.85rem;color:#c5cfe8">
+          <li style="margin-bottom:6px">Validate against a real terminology server (Snowstorm) — promote PROVISIONAL → VERIFIED with evidence</li>
+          <li style="margin-bottom:6px">Profile against US Core / a surgical IG; run the official validator in CI</li>
+          <li style="margin-bottom:6px">Swap in-memory store for HAPI FHIR and prove the bundles load into a real server</li>
+          <li style="margin-bottom:6px"><code>$everything</code> and Provenance resources per case — the first thing regulated customers ask about</li>
+          <li>Time-series split: telemetry to a TSDB, FHIR <code>SampledData</code> for the exchange summary</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /wrap -->
+
+<script>
+/* ── Nav ── */
+document.querySelectorAll('#nav button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('section').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById(b.dataset.t).classList.add('active');
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
+});
+
+/* ── Pipeline steps ── */
+const STEPS=[
+  {n:"Source case ingested",d:"OR platform emits a SurgicalCase",x:"Fields include a local procedure code (e.g. RAS-CHOL-01), patient MRN, optional laterality, DeviceRecord[], TelemetryEvent[], PhysioSample[]. Deliberately NOT FHIR — shaped for engineering, not exchange."},
+  {n:"MRN pseudonymisation",d:"Patient identifier → deterministic hash",x:"The hash is NOT de-identification. A deterministic MRN hash is still a linkable identifier under HIPAA Safe Harbor. It is defensible here only because the input is synthetic. A test asserts no raw MRN survives to output."},
+  {n:"Terminology resolution",d:"Local codes → SNOMED / LOINC / UCUM with trust status",x:"Each binding is stamped VERIFIED (stand behind it) or PROVISIONAL (developer-asserted, must be validated against a terminology server before clinical use). Unmapped codes raise immediately — no silent fallback."},
+  {n:"Gate: procedure code mappable?",d:"Drop the case if no terminology binding exists",x:"~8% of cases carry RAS-COLEC-99 — a profile shipped without informing the informatics team. The most common field failure. A text-only CodeableConcept is tempting but wrong: uncoded = invisible to every query that matters."},
+  {n:"Gate: laterality on sided procedure?",d:"Drop if missing — wrong-site-surgery class defect",x:"Inguinal hernia repair with no laterality specified. SNOMED carries no side; it must ride on Procedure.bodySite. Defaulting a side is unthinkable. Emitting without it hands a receiving system a record it cannot safely act on."},
+  {n:"Gate: sensor plausibility check",d:"Out-of-range values → entered-in-error, value stripped",x:"SpO₂ of 4% is a pulse-ox artefact. The resource is emitted as status:entered-in-error with a dataAbsentReason and no numeric value. The failure is recorded; the bad number is not. Silent deletion would hide the sensor fault."},
+  {n:"Telemetry downsampling",d:"72,000 points → ~40 Observations per case",x:"FHIR is an exchange format, not a time-series database. Mapping 1 Hz telemetry 1:1 is the classic architectural mistake. In production the stream lives in a TSDB; FHIR carries summaries or SampledData. The downsampling rate is explicit in the quality report."},
+  {n:"FHIR resource assembly",d:"Patient · Encounter · Procedure · Device · Observation",x:"Resources are assembled only after all gates pass. An early bug built the Procedure before the laterality check, producing orphan resources (22 Procedures against 20 Patients). The fix was 3 lines; the detection required the quality report counting by resource type."},
+  {n:"Transaction Bundle",d:"Idempotent PUT, client-assigned UUIDs",x:"Retries and backfills are normal in health integration. A non-idempotent loader (POST) creates duplicate clinical records. PUT with stable IDs is safe to replay as many times as needed."},
+  {n:"Quality report",d:"The governance artefact — counts, rates, sampled issues",x:"Reports % exchangeable, breakdowns by severity, by element, by resource type, and up to 10 sampled ERROR cases. This is a first-class deliverable. It caught the orphan-Procedure bug. Prose (docstrings, comments) does not enforce invariants — tests and reports do."},
+  {n:"FHIR REST API",d:"Read-only, conformant endpoints + CapabilityStatement",x:"GET /metadata · /Procedure · /Observation?patient=&code= · /quality-report. Search raises on unsupported parameters — silently ignoring a filter is how a client ends up shown another patient's data. In-memory for demo; replace with HAPI FHIR for production."}
+];
+const flowEl=document.getElementById('flow');
+STEPS.forEach((s,i)=>{
+  const el=document.createElement('div');el.className='step';
+  el.innerHTML=`<div class="step-num">${i+1}</div><div class="body"><h4>${s.n}</h4><div class="d">${s.d}</div><div class="detail">${s.x}</div></div>`;
+  el.onclick=()=>el.classList.toggle('open');
+  flowEl.appendChild(el);
+});
+
+/* ── Interop challenges ── */
+const FAILURES=[
+  {icon:"🗂️",cls:"warn",t:"Vocabulary",h:"Local procedure codes have no SNOMED home",r:"RAS-CHOL-01 maps to 45595009 Cholecystectomy — but the minimally-invasive approach and robotic assistance are lost. In SNOMED those require post-coordinated expressions.",d:"Map to the nearest parent concept, flag PROVISIONAL, preserve full clinical intent in Procedure.code.text. The free text is the safety net for what the code destroyed. Do not invent a precision that isn't there."},
+  {icon:"⚖️",cls:"warn",t:"Governance",h:"No SNOMED licence — don't pretend",r:"Developer-guessed SNOMED codes shipped as fact produce unusable registry data. The problem isn't guessing — it's not labelling the guess.",d:"Every binding carries VERIFIED or PROVISIONAL. A test keeps procedure bindings provisional permanently. They can only be promoted by a clinical informaticist against a licensed terminology server."},
+  {icon:"🔬",cls:"warn",t:"Validation",h:"Estimated blood loss has no LOINC code",r:"A fabricated LOINC passes a validator and is silently wrong. That is the worst outcome — it looks right to everything that checks.",d:"Emit under a local URI (urn:local:or-metrics). The US Core validator rejects it loudly — which is correct. A loud failure is far preferable to a silent, wrong success."},
+  {icon:"❓",cls:"bad",t:"Completeness",h:"Unmapped procedure code — the #1 field failure",r:"~8% of cases carry a profile the device team shipped without telling informatics. This is the single most common interoperability failure in the field.",d:"Drop the case entirely, count it, report it. Never degrade to text-only. A registry record that can't be found by a procedure query is worse than no record at all."},
+  {icon:"⚕️",cls:"bad",t:"Patient Safety",h:"Missing laterality — wrong-site-surgery class",r:"Hernia repair with no left/right specified. The SNOMED concept carries no side; it must be an explicit assertion on Procedure.bodySite. No inference is safe.",d:"ERROR → case dropped. Defaulting a side is clinically unthinkable. Emitting without it passes a receiving system a record it cannot safely act on."},
+  {icon:"📡",cls:"warn",t:"Architecture",h:"FHIR is not a time-series store",r:"1 Hz × 4 h × 5 metrics = 72,000 Observations for one surgical case. Mapping device telemetry 1:1 to FHIR resources is the classic architectural mistake.",d:"Downsample to ~40 and document it. In production, the stream lives in a TSDB; FHIR carries summaries or SampledData. Knowing what not to put in FHIR is the senior engineering judgement."},
+  {icon:"🌡️",cls:"warn",t:"Data Quality",h:"Sensor artefacts and ambiguous units",r:"SpO₂ of 4% is a glitch, not a finding. And 37 is a normal temperature or severe hypothermia depending on whether the unit is Cel or [degF] — and nothing in raw JSON tells you.",d:"Out-of-range values → entered-in-error, no value. Units pass through an explicit UCUM map that raises on unknown input. Bad number discarded; failure recorded."}
+];
+const fcGrid=document.getElementById('fcgrid');
+FAILURES.forEach(f=>{
+  const el=document.createElement('div');el.className='fc-card';
+  el.innerHTML=`<div class="fc-header"><div class="fc-icon ${f.cls}">${f.icon}</div><div><span class="tag">${f.t}</span><h4 style="margin-top:4px">${f.h}</h4></div></div><p class="rationale">${f.r}</p><div class="decision"><strong>Decision:</strong> ${f.d}</div>`;
+  el.onclick=()=>el.classList.toggle('open');
+  fcGrid.appendChild(el);
+});
+
+/* ── FHIR output samples ── */
+const FHIR_SAMPLES=[
+  {label:"Procedure",json:`{
+  "resourceType": "Procedure",
+  "id": "proc-case-001",
+  "status": "completed",
+  "subject": { "reference": "Patient/pt-case-001" },
+  "encounter": { "reference": "Encounter/enc-case-001" },
+  "code": {
+    "coding": [{
+      "system": "http://snomed.info/sct",
+      "code": "45595009",
+      "display": "Cholecystectomy (procedure)"
+    }],
+    "text": "RAS-CHOL-01 — Robotic-assisted laparoscopic cholecystectomy"
+  },
+  "extension": [{
+    "url": "urn:binding-trust",
+    "valueCode": "PROVISIONAL"
+  }],
+  "performer": [{
+    "actor": { "reference": "Practitioner/surg-001" }
+  }]
+}`},
+  {label:"Observation",json:`{
+  "resourceType": "Observation",
+  "id": "obs-hr-case001-0",
+  "status": "final",
+  "category": [{
+    "coding": [{
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs"
+    }]
+  }],
+  "code": {
+    "coding": [{
+      "system": "http://loinc.org",
+      "code": "8867-4",
+      "display": "Heart rate"
+    }]
+  },
+  "subject": { "reference": "Patient/pt-case-001" },
+  "valueQuantity": {
+    "value": 72,
+    "unit": "beats/min",
+    "system": "http://unitsofmeasure.org",
+    "code": "/min"
+  }
+}`},
+  {label:"Observation (error)",json:`{
+  "resourceType": "Observation",
+  "id": "obs-spo2-artefact-007",
+  "status": "entered-in-error",
+  "code": {
+    "coding": [{
+      "system": "http://loinc.org",
+      "code": "59408-5",
+      "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
+    }]
+  },
+  "subject": { "reference": "Patient/pt-case-007" },
+  "dataAbsentReason": {
+    "coding": [{
+      "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+      "code": "error",
+      "display": "Error"
+    }]
+  },
+  "_valueQuantity": {
+    "extension": [{
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "error"
+    }]
+  }
+}`},
+  {label:"Quality Report",json:`{
+  "cases_in": 25,
+  "cases_exchangeable": 20,
+  "cases_dropped": 5,
+  "exchangeable_rate": 0.8,
+  "resources_out": 953,
+  "resources_by_type": {
+    "Patient": 20, "Encounter": 20,
+    "Procedure": 20, "Device": 60,
+    "Observation": 833
+  },
+  "issues_by_severity": {
+    "ERROR": 5, "WARNING": 47, "INFO": 12
+  },
+  "terminology_coverage": {
+    "verified": 5, "provisional": 6, "total": 11
+  },
+  "sample_errors": [
+    {
+      "case_id": "case-004",
+      "element": "Procedure.code",
+      "message": "No terminology binding for RAS-COLEC-99 — case dropped"
+    },
+    {
+      "case_id": "case-011",
+      "element": "Procedure.bodySite",
+      "message": "Missing laterality on sided procedure — case dropped"
+    }
+  ]
+}`}
+];
+const fhirTabs=document.getElementById('fhirTabs');
+const fhirPanes=document.getElementById('fhirPanes');
+FHIR_SAMPLES.forEach((s,i)=>{
+  const t=document.createElement('button');t.className='fhir-tab'+(i===0?' active':'');t.textContent=s.label;
+  t.onclick=()=>{document.querySelectorAll('.fhir-tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.querySelectorAll('.fhir-pane').forEach(x=>x.classList.remove('active'));document.getElementById('fp'+i).classList.add('active');};
+  fhirTabs.appendChild(t);
+  const p=document.createElement('div');p.className='fhir-pane'+(i===0?' active':'');p.id='fp'+i;
+  p.innerHTML=`<pre>${s.json}</pre>`;fhirPanes.appendChild(p);
+});
+
+/* ── Architecture table ── */
+const MODS=[
+  ["source_schema.py","Vendor-side data model — deliberately not FHIR. Defines SurgicalCase and its warts."],
+  ["generator.py","Synthetic cases with realistic defects injected at calibrated rates."],
+  ["terminology.py","Local → SNOMED / LOINC / UCUM mappings, each with a trust status."],
+  ["mapping.py","Source → FHIR. Logs every lossy decision as a MappingIssue. Drop, don't degrade."],
+  ["quality.py","The governance artefact — % exchangeable, breakdowns, sampled error cases."],
+  ["store.py","In-memory FHIR store. Explicit: raises on unsupported search params, never ignores."],
+  ["api.py","Read-only FastAPI FHIR REST surface + CapabilityStatement."]
+];
+const modTb=document.getElementById('modTable');
+MODS.forEach(([m,d])=>{
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td style="padding:7px 0;border-bottom:1px solid var(--line);white-space:nowrap"><code>${m}</code></td><td style="padding:7px 0 7px 12px;border-bottom:1px solid var(--line);color:#c5cfe8">${d}</td>`;
+  modTb.appendChild(tr);
+});
+
+const DECS=[
+  ["Drop on unmapped code","Uncoded clinical data is worse than absent — invisible to queries","8% of surgical volume lost; a registry might prefer text-coded"],
+  ["Drop on missing laterality","Wrong-site-surgery-class defect","Could emit with dataAbsentReason on bodySite instead"],
+  ["PUT not POST","Idempotent — retries/backfills don't create duplicate records","Requires client-assigned IDs; some servers resist"],
+  ["Raise on unsupported search","Ignoring a filter shows the wrong patient's data","Stricter than most real FHIR servers"]
+];
+const decTb=document.getElementById('decTable');
+DECS.forEach(([d,r,c])=>{
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td style="padding:6px 0;border-bottom:1px solid var(--line);font-weight:700;font-size:.8rem;white-space:nowrap;padding-right:10px">${d}</td><td style="padding:6px 0;border-bottom:1px solid var(--line);color:#c5cfe8;padding-right:10px">${r}</td><td style="padding:6px 0;border-bottom:1px solid var(--line);color:var(--muted)">${c}</td>`;
+  decTb.appendChild(tr);
+});
+
+document.getElementById('archDiagram').textContent=`Source (vendor-shaped)
+  SurgicalCase
+  ├─ procedure_local_code
+  ├─ patient_mrn
+  ├─ laterality?          ──▶  terminology.py
+  ├─ DeviceRecord[]              concept map
+  ├─ TelemetryEvent[]            + trust status
+  └─ PhysioSample[]       ──▶  mapping.py
+                                 + MappingIssue  ──▶  Patient
+                           ──▶  quality.py              Encounter
+                                 report           ──▶  Procedure
+                                                  ──▶  Device
+                                                  ──▶  Observation
+                                                        │
+                                                        ▼
+                                                  Transaction Bundle
+                                                  (idempotent PUT)
+                                                        │
+                                                        ▼
+                                                  FastAPI FHIR API
+                                                  /metadata
+                                                  /Procedure
+                                                  /Observation
+                                                  /quality-report`;
+
+/* ══════════════════════════════════════════
+   POLICY ENGINE  (mirrors mapping.py logic)
+   ══════════════════════════════════════════ */
+const POLICY={dropOnUnmappedCode:true,dropOnMissingLaterality:true,spo2Min:50,spo2Max:100};
+
+function evaluateCase(c){
+  const issues=[];let status="good";
+  const escalate=s=>{if(s==="bad")status="bad";else if(s==="warn"&&status!=="bad")status="warn";};
+  if(c.proc==="unmapped"){
+    if(POLICY.dropOnUnmappedCode){escalate("bad");issues.push("⛔ No terminology binding for "+c.proc+" → case DROPPED. An uncoded procedure is invisible to every meaningful query.");}
+    else{escalate("warn");issues.push("⚠️ No binding found — emitting text-only CodeableConcept (governance policy relaxed). This record will not surface in coded procedure queries.");}
+  } else {
+    escalate("warn");issues.push("⚠️ Procedure maps to SNOMED "+45595009+" (provisional) — robotic approach and minimally-invasive modifier are preserved in code.text only.");
+  }
+  if(c.latReq==="yes"&&c.latVal==="no"){
+    if(POLICY.dropOnMissingLaterality){escalate("bad");issues.push("⛔ Sided procedure with no laterality recorded → wrong-site-surgery-class defect → DROPPED.");}
+    else{escalate("warn");issues.push("⚠️ Laterality absent — emitting with dataAbsentReason on Procedure.bodySite (governance policy relaxed).");}
+  }
+  const s=parseFloat(c.spo2);
+  if(!isNaN(s)&&(s<POLICY.spo2Min||s>POLICY.spo2Max)){escalate("warn");issues.push(`⚠️ SpO₂ ${s}% outside plausible range [${POLICY.spo2Min}–${POLICY.spo2Max}%] → Observation emitted as status:entered-in-error. Value removed; failure recorded.`);}
+  if(c.unit==="unknown"){escalate("warn");issues.push("⚠️ Temperature unit not in UCUM map → pipeline raises. Value cannot be safely emitted until unit is resolved.");}
+  const t=parseInt(c.tele,10);
+  if(!isNaN(t)&&t>100)issues.push(`ℹ️ Telemetry downsampled ${t.toLocaleString()} → ~40 Observations. FHIR is an exchange format, not a time-series database.`);
+  if(status==="good")issues.unshift("✅ All quality gates passed. Case is exchangeable.");
+  return{status,issues};
+}
+
+function runSim(){
+  const c={proc:proc.value,latReq:latReq.value,latVal:latVal.value,spo2:spo2.value,unit:unit.value,tele:tele.value};
+  const r=evaluateCase(c);
+  const box=document.getElementById('verdict');
+  box.className='result-box '+r.status;
+  const titles={bad:"⛔ Case DROPPED — not exchangeable",warn:"⚠️ Exchangeable — with flagged issues",good:"✅ Exchangeable — clean"};
+  box.innerHTML=`<h4>${titles[r.status]}</h4><ul style="margin-top:8px">${r.issues.map(i=>`<li style="margin-bottom:5px">${i}</li>`).join('')}</ul>`;
+}
+
+/* ── Cohort ── */
+const COHORT=(()=>{const a=[];const p=(n,t)=>{for(let i=0;i<n;i++)a.push(t);};
+  p(2,{proc:"unmapped",latReq:"no",latVal:"yes",spo2:"98",unit:"known",tele:"60000"});
+  p(2,{proc:"mapped",latReq:"yes",latVal:"no",spo2:"97",unit:"known",tele:"55000"});
+  p(1,{proc:"mapped",latReq:"yes",latVal:"no",spo2:"4",unit:"known",tele:"50000"});
+  p(3,{proc:"mapped",latReq:"no",latVal:"yes",spo2:"3",unit:"known",tele:"70000"});
+  p(2,{proc:"mapped",latReq:"yes",latVal:"yes",spo2:"96",unit:"unknown",tele:"48000"});
+  p(15,{proc:"mapped",latReq:"no",latVal:"yes",spo2:"98",unit:"known",tele:"72000"});
+  return a;
+})();
+
+function renderCohort(){
+  POLICY.dropOnUnmappedCode=document.getElementById('polUnmapped').checked;
+  POLICY.dropOnMissingLaterality=document.getElementById('polLat').checked;
+  let good=0,warn=0,bad=0;
+  COHORT.forEach(c=>{const s=evaluateCase(c).status;if(s==="good")good++;else if(s==="warn")warn++;else bad++;});
+  const tot=COHORT.length,exch=good+warn,pct=Math.round(exch/tot*100);
+  const bar=document.getElementById('cohortBar');
+  const seg=(cls,n,lbl)=>n?`<div class="seg ${cls}" style="width:${n/tot*100}%">${n}</div>`:"";
+  bar.innerHTML=seg('seg-good',good)+seg('seg-warn',warn)+seg('seg-bad',bad);
+  const rt=document.getElementById('rateText');
+  rt.textContent=`${exch}/${tot} exchangeable (${pct}%) · ${bad} dropped`;
+  rt.style.color=pct>=80?'var(--good)':pct>=60?'var(--warn)':'var(--bad)';
+}
+document.getElementById('polUnmapped').addEventListener('change',()=>{renderCohort();runSim();});
+document.getElementById('polLat').addEventListener('change',()=>{renderCohort();runSim();});
+renderCohort();
+
+/* ── PWA ── */
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
