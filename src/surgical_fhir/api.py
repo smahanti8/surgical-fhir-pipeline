@@ -14,6 +14,8 @@ Conformance choices that matter (and that most portfolio repos skip):
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -23,6 +25,7 @@ from fhir.resources.R4B.capabilitystatement import CapabilityStatement
 from fhir.resources.R4B.operationoutcome import OperationOutcome
 
 from .generator import generate_cases
+from .kpi_store import KPIStore
 from .quality import build_report
 from .store import FHIRStore
 
@@ -61,7 +64,11 @@ def _fhir(payload: dict, status: int = 200) -> JSONResponse:
     return JSONResponse(content=payload, status_code=status, media_type=FHIR_JSON)
 
 
-def create_app(n_cases: int = 25, seed: int = 42) -> FastAPI:
+def create_app(
+    n_cases: int = 25,
+    seed: int = 42,
+    kpi_db: Path | str | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="Surgical Procedure FHIR Pipeline",
         description=(
@@ -75,6 +82,9 @@ def create_app(n_cases: int = 25, seed: int = 42) -> FastAPI:
     report, resources = build_report(cases)
     store.load(resources)
     _report_cache["report"] = report
+
+    kpi_store = KPIStore(db_path=kpi_db)
+    kpi_store.persist(report)
 
     @app.get("/metadata")
     def metadata() -> JSONResponse:
@@ -115,6 +125,24 @@ def create_app(n_cases: int = 25, seed: int = 42) -> FastAPI:
     def quality_report() -> JSONResponse:
         """Non-FHIR endpoint. The governance artefact, deliberately separate."""
         return JSONResponse(content=_report_cache["report"].to_dict())
+
+    @app.get("/governance-kpis")
+    def governance_kpis(limit: int = 50) -> JSONResponse:
+        """Non-FHIR endpoint. Governance KPI trend across runs, oldest-first.
+
+        Exposes the time-series of per-run quality metrics so a compliance
+        reviewer or CIO can see exchangeability and trust-mix moving
+        release-over-release, not just the latest snapshot.
+        """
+        runs = kpi_store.get_trend(limit=limit)
+        return JSONResponse(
+            content={
+                "schema_version": "1",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "total_runs": len(runs),
+                "runs": runs,
+            }
+        )
 
     @app.get("/{resource_type}/{rid}")
     def read(resource_type: str, rid: str) -> JSONResponse:
