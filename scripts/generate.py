@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
 from surgical_fhir.generator import generate_cases
+from surgical_fhir.kpi_store import KPIStore
 from surgical_fhir.mapping import to_transaction_bundle
 from surgical_fhir.quality import build_report
 
@@ -27,6 +28,8 @@ def main() -> int:
     cases = generate_cases(n=args.cases, seed=args.seed)
     report, resources = build_report(cases)
 
+    run_id = KPIStore().persist(report)
+
     bundle = to_transaction_bundle(resources)
     (out / "transaction-bundle.json").write_text(bundle.model_dump_json(indent=2))
     (out / "quality-report.json").write_text(json.dumps(report.to_dict(), indent=2))
@@ -34,6 +37,7 @@ def main() -> int:
 
     print(report.render())
     print(f"\nWrote {len(resources)} resources -> {out}/transaction-bundle.json")
+    print(f"KPI run persisted: {run_id}")
     return 0
 
 

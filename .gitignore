@@ -7,3 +7,4 @@ output/
 .DS_Store
 notes/
 .claude/settings.local.json
+governance_kpis.db
