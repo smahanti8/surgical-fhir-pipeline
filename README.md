@@ -105,9 +105,12 @@ See [`DECISIONS.md`](DECISIONS.md) for the full rationale and counter-arguments.
 src/surgical_fhir/
 ├── source_schema.py   # Vendor-side data model — deliberately not FHIR
 ├── generator.py       # Synthetic cases with calibrated defect injection
+├── trust_status.py    # BindingStatus, Binding, UnmappedConceptError — isolated for reuse
 ├── terminology.py     # Local → SNOMED/LOINC/UCUM, each with a trust status
 ├── mapping.py         # Source → FHIR; every lossy decision is a MappingIssue
 ├── quality.py         # Governance artefact — % exchangeable, breakdowns, samples
+├── provenance.py      # Provenance resource per mapped case, with trust-status annotation
+├── kpi_store.py       # Per-run governance KPI persistence (SQLite)
 ├── store.py           # In-memory FHIR store; raises on unsupported search params
 └── api.py             # Read-only FastAPI FHIR REST surface + CapabilityStatement
 ```
@@ -142,13 +145,26 @@ curl "localhost:8000/Procedure?performer=Dr-X"        # → OperationOutcome 400
 
 ---
 
-## What I'd build next
+## What shipped
 
-1. **Validate against a real terminology server** (Snowstorm) — promote `PROVISIONAL → VERIFIED` with evidence
-2. **Profile against US Core / a surgical IG** and run the official validator in CI
-3. **Swap in-memory store for HAPI FHIR** and prove the bundles load into a real server
-4. **`$everything` + Provenance resources** per case — the first thing regulated customers ask about
-5. **Time-series split** — telemetry to a TSDB, FHIR `SampledData` for the exchange summary
+| | Feature |
+|---|---|
+| ✅ | Governance KPI store — per-run exchangeability and trust-mix trend, persisted to SQLite |
+| ✅ | `/governance-kpis` — machine-readable KPI trend endpoint |
+| ✅ | `trust_status.py` — BindingStatus, Binding, UnmappedConceptError isolated for prior-auth-agent reuse |
+| ✅ | `Provenance` resource per mapped case, recording binding trust status (PROVISIONAL/VERIFIED) |
+| ✅ | `GET /Encounter/{id}/$everything` — single-case bundle including Provenance |
+
+## Deliberately deferred
+
+| Item | Reason |
+|---|---|
+| Terminology-server validation loop (Snowstorm) | The honest PROVISIONAL→VERIFIED promotion path. Worth doing when there is a real licensed consumer; running it to generate a portfolio badge without one would be performative. |
+| Profile validation against US Core / a surgical IG | Strongest production-readiness signal, but not visible in a code review of this scope. Revisit if the pipeline needs to interoperate with a specific implementation guide. |
+| Swap in-memory store for HAPI FHIR | The in-memory store proves what this repo actually demonstrates — the mapping and governance layer. A real FHIR server is a production infrastructure concern, not a portfolio signal for the skills shown here. |
+| Time-series architecture split (TSDB + FHIR SampledData) | High-effort, low incremental signal. The repo documents *why* 1:1 telemetry-to-FHIR is the wrong approach; implementing the alternative adds infrastructure complexity without adding to the governance story. |
+
+These are prioritization decisions, not omissions. The repo is intentionally scoped to demonstrate governance-first FHIR mapping; production infrastructure concerns are documented in `ARCHITECTURE.md §6`.
 
 ---
 
