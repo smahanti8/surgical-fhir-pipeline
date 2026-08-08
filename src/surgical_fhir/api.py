@@ -26,6 +26,7 @@ from fhir.resources.R4B.operationoutcome import OperationOutcome
 
 from .generator import generate_cases
 from .kpi_store import KPIStore
+from .provenance import map_provenance
 from .quality import build_report
 from .store import FHIRStore
 
@@ -86,6 +87,23 @@ def create_app(
     kpi_store = KPIStore(db_path=kpi_db)
     kpi_store.persist(report)
 
+    for case in cases:
+        proc = store.read("Procedure", f"proc-{case.case_id}")
+        if proc is None:
+            continue
+        enc = store.read("Encounter", f"enc-{case.case_id}")
+        patient_id = enc.subject.reference.split("/")[-1]
+        patient = store.read("Patient", patient_id)
+        obs = store.search("Observation", {"encounter": f"enc-{case.case_id}"})
+        devices = [
+            d
+            for d in (store.read("Device", f"dev-{dev.device_id}") for dev in case.devices)
+            if d is not None
+        ]
+        targets = [r for r in [enc, patient, proc, *devices, *obs] if r is not None]
+        prov = map_provenance(case, targets)
+        store.load([prov])
+
     @app.get("/metadata")
     def metadata() -> JSONResponse:
         cs = CapabilityStatement(
@@ -143,6 +161,65 @@ def create_app(
                 "runs": runs,
             }
         )
+
+    @app.get("/Encounter/{enc_id}/$everything")
+    def encounter_everything(enc_id: str, request: Request) -> JSONResponse:
+        """Return all FHIR resources for a single OR case as a searchset Bundle.
+
+        Scoped implementation: covers only the resources this pipeline produces
+        for one case (Encounter, Patient, Procedure, Device(s), Observation(s),
+        Provenance). NOT the full FHIR $everything operation — no _since/_type
+        params, no pagination, no traversal outside the case boundary.
+        The FHIR R4B spec defines $everything on Patient; this endpoint applies
+        the same operation pattern to the Encounter-as-case boundary.
+        See ARCHITECTURE.md §6 for scope honesty.
+        """
+        enc = store.read("Encounter", enc_id)
+        if enc is None:
+            return _fhir(
+                _outcome("error", "not-found", f"Encounter/{enc_id} not found"), 404
+            )
+
+        case_id = enc_id[len("enc-"):]
+        patient_id = enc.subject.reference.split("/")[-1]
+
+        resources: list[Any] = []
+        resources.append(enc)
+
+        patient = store.read("Patient", patient_id)
+        if patient is not None:
+            resources.append(patient)
+
+        proc = store.read("Procedure", f"proc-{case_id}")
+        if proc is not None:
+            resources.append(proc)
+            for ref in proc.usedReference or []:
+                dev_id = ref.reference.split("/")[-1]
+                dev = store.read("Device", dev_id)
+                if dev is not None:
+                    resources.append(dev)
+
+        resources.extend(store.search("Observation", {"encounter": enc_id}))
+
+        prov = store.read("Provenance", f"prov-{case_id}")
+        if prov is not None:
+            resources.append(prov)
+
+        bundle = Bundle(
+            id=f"everything-{enc_id}",
+            type="searchset",
+            total=len(resources),
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            link=[BundleLink(relation="self", url=str(request.url))],
+            entry=[
+                BundleEntry(
+                    fullUrl=f"{request.base_url}{r.__resource_type__}/{r.id}",
+                    resource=r,
+                )
+                for r in resources
+            ],
+        )
+        return _fhir(_as_json(bundle))
 
     @app.get("/{resource_type}/{rid}")
     def read(resource_type: str, rid: str) -> JSONResponse:
