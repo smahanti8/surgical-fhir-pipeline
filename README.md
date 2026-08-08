@@ -163,6 +163,7 @@ curl "localhost:8000/Procedure?performer=Dr-X"        # → OperationOutcome 400
 | Profile validation against US Core / a surgical IG | Strongest production-readiness signal, but not visible in a code review of this scope. Revisit if the pipeline needs to interoperate with a specific implementation guide. |
 | Swap in-memory store for HAPI FHIR | The in-memory store proves what this repo actually demonstrates — the mapping and governance layer. A real FHIR server is a production infrastructure concern, not a portfolio signal for the skills shown here. |
 | Time-series architecture split (TSDB + FHIR SampledData) | High-effort, low incremental signal. The repo documents *why* 1:1 telemetry-to-FHIR is the wrong approach; implementing the alternative adds infrastructure complexity without adding to the governance story. |
+| Shared evidence primitive (`evidence-gate`) | Considered extracting the trust/evidence pattern shared with `prior-auth-agent` into a common package. Declined: only one consumer computes tier assignment; this repo asserts it as static data. See D11 in `prior-auth-agent`'s DECISIONS.md. Revisit if the Snowstorm validation loop makes promotion executable here. |
 
 These are prioritization decisions, not omissions. The repo is intentionally scoped to demonstrate governance-first FHIR mapping; production infrastructure concerns are documented in `ARCHITECTURE.md §6`.
 
