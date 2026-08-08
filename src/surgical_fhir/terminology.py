@@ -26,53 +26,38 @@ SNOMED CT is licensed content (IHTSDO/SNOMED International; free in UK/US member
 territories via UMLS licence). LOINC is freely available under the LOINC licence.
 Codes below are reproduced as identifiers only for interoperability
 demonstration, which is the normal use of a code system in an implementation.
+
+Trust-status primitives (BindingStatus, Binding, UnmappedConceptError) are
+defined in trust_status.py and re-exported here so existing callers are
+unaffected by the split.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
+# Re-exported so callers that `from . import terminology as tx` and use
+# tx.BindingStatus / tx.Binding / tx.UnmappedConceptError continue to work
+# without any change.
+from .trust_status import Binding, BindingStatus, UnmappedConceptError
+
+__all__ = [
+    "BindingStatus",
+    "Binding",
+    "UnmappedConceptError",
+    "SNOMED_SYSTEM",
+    "LOINC_SYSTEM",
+    "UCUM_SYSTEM",
+    "procedure_binding",
+    "observation_binding",
+    "ucum_unit",
+    "administrative_gender",
+    "procedure_status",
+    "all_bindings",
+    "coverage_report",
+]
 
 SNOMED_SYSTEM = "http://snomed.info/sct"
 LOINC_SYSTEM = "http://loinc.org"
 UCUM_SYSTEM = "http://unitsofmeasure.org"
-
-
-class BindingStatus(str, Enum):
-    """How much you are allowed to trust this mapping."""
-
-    VERIFIED = "verified"  # checked against an authoritative release
-    PROVISIONAL = "provisional"  # asserted by a developer; NOT clinically safe
-    DEPRECATED = "deprecated"  # superseded; retained for historical decode
-
-
-@dataclass(frozen=True)
-class Binding:
-    """A single local-code -> standard-code mapping with its evidence."""
-
-    local_code: str
-    system: str
-    code: str
-    display: str
-    status: BindingStatus
-    source: str
-    note: str = ""
-
-    @property
-    def is_trusted(self) -> bool:
-        return self.status is BindingStatus.VERIFIED
-
-
-class UnmappedConceptError(KeyError):
-    """Raised when a local code has no binding. Deliberately loud."""
-
-    def __init__(self, local_code: str, domain: str):
-        self.local_code = local_code
-        self.domain = domain
-        super().__init__(
-            f"No {domain} binding for local code {local_code!r}. "
-            "Refusing to emit an uncoded CodeableConcept."
-        )
 
 
 # --------------------------------------------------------------------------
