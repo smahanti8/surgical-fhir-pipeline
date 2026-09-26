@@ -183,3 +183,4 @@ MIT. Synthetic data only.
 SNOMED CT is licensed content (SNOMED International; free in member territories via UMLS).
 LOINC is used under the LOINC licence.
 Codes here are reproduced as identifiers for interoperability demonstration — the provisional ones must not be treated as clinically validated.
+This is a demonstration, not a medical device, and must not be used in patient care. The full notice is in [NOTICE.md](NOTICE.md).
