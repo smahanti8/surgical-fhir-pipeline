@@ -11,4 +11,34 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pytest -q
       - name: Pipeline must stay reproducible
-        run: PYTHONPATH=src python scripts/generate.py -n 25
+        run: |
+          set -euo pipefail
+
+          # KPI ledger embeds a fresh timestamp + random run_id on every run by
+          # design (see kpi_store.py); point both runs at throwaway DB files so
+          # CI never touches a shared/committed governance_kpis.db.
+          # Both runs write to the same relative "-o out" dir (renamed between
+          # runs) so the "Wrote N resources -> out/..." stdout line is
+          # identical across runs; using two differently-named dirs would make
+          # that line differ even when the pipeline output itself is unchanged.
+          SURGICAL_FHIR_KPI_DB="$(mktemp -u).db" PYTHONPATH=src python scripts/generate.py -n 25 -o out > /tmp/run1.log
+          mv out /tmp/run1
+          SURGICAL_FHIR_KPI_DB="$(mktemp -u).db" PYTHONPATH=src python scripts/generate.py -n 25 -o out > /tmp/run2.log
+          mv out /tmp/run2
+
+          # "KPI run persisted: <id>" is expected to differ every run (random
+          # run_id) and is not a real reproducibility signal, so it is excluded
+          # from the diff below. Anchored so the filter can't silently start
+          # swallowing unrelated lines if the log format changes.
+          for f in /tmp/run1.log /tmp/run2.log; do
+            count=$(grep -c '^KPI run persisted: ' "$f")
+            if [ "$count" -ne 1 ]; then
+              echo "expected exactly one 'KPI run persisted:' line in $f, found $count" >&2
+              exit 1
+            fi
+          done
+
+          diff <(grep -v '^KPI run persisted: ' /tmp/run1.log) <(grep -v '^KPI run persisted: ' /tmp/run2.log)
+          diff /tmp/run1/transaction-bundle.json /tmp/run2/transaction-bundle.json
+          diff /tmp/run1/quality-report.json /tmp/run2/quality-report.json
+          diff /tmp/run1/quality-report.txt /tmp/run2/quality-report.txt
