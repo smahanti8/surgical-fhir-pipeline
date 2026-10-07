@@ -92,6 +92,12 @@ def create_app(
         if proc is None:
             continue
         enc = store.read("Encounter", f"enc-{case.case_id}")
+        if enc is None:
+            raise RuntimeError(
+                f"referential integrity invariant violated for case {case.case_id!r}: "
+                f"Procedure proc-{case.case_id} exists but its Encounter "
+                f"enc-{case.case_id} does not"
+            )
         patient_id = enc.subject.reference.split("/")[-1]
         patient = store.read("Patient", patient_id)
         obs = store.search("Observation", {"encounter": f"enc-{case.case_id}"})
