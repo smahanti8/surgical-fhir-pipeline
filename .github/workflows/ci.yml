@@ -12,6 +12,7 @@ jobs:
       - run: pytest -q --cov=surgical_fhir --cov-report=term-missing --cov-fail-under=93
       - run: bandit -r src/
       - run: mypy src/
+      - run: pip-audit -r requirements.txt
       - name: Pipeline must stay reproducible
         run: |
           set -euo pipefail
