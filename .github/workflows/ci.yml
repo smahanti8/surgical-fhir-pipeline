@@ -11,6 +11,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: pytest -q
       - run: bandit -r src/
+      - run: mypy src/
       - name: Pipeline must stay reproducible
         run: |
           set -euo pipefail

@@ -15,3 +15,11 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.mypy]
+# fhir.resources models are pydantic v2; without this plugin mypy flags 46
+# false positives across mapping.py/provenance.py/api.py where dicts and plain
+# str/date values are passed to constructors that pydantic validates/coerces
+# correctly at runtime. The plugin alone resolved all of them - no per-module
+# overrides needed.
+plugins = ["pydantic.mypy"]
