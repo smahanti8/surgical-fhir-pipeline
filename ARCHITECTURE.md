@@ -233,6 +233,10 @@ is reachable only by inclusion in `$everything`. This is a known, documented cov
 These are design decisions, not gaps:
 
 - **No persistence.** Store is in-memory. Restart clears all resources. HAPI FHIR or PostgreSQL would be the next step.
+- **Reference deployment target has no disk at all.** The Render free instance
+  this pipeline is set up to deploy to (D8 in `DECISIONS.md`; not deployed yet)
+  has no persistent disk, so the KPI SQLite file (`SURGICAL_FHIR_KPI_DB`) resets on every redeploy, restart, or
+  15-minute spin-down, not just on the in-memory store's own restart (D9).
 - **No auth.** API is unauthenticated. No tokens, no SMART on FHIR. Required before any production use.
 - **No write API.** Clients cannot PUT, POST, or PATCH resources via the REST surface.
 - **No validated terminology server.** SNOMED bindings are provisional — not verified against a Snowstorm instance with a licence.

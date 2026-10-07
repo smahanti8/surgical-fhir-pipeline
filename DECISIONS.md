@@ -147,3 +147,63 @@ existing assertions, not a parallel path that could drift from them.
 overhead; a determined skeptic could argue pytest already covers this exact
 behaviour and Gherkin adds a translation layer that can go stale if a step
 definition is ever loosened to stop calling the real functions.
+
+---
+
+## D8. Deploy target: Render, free tier
+
+**Context.** The pipeline needed a real, CI-triggerable, reachable deployment to
+prove it runs outside a laptop, without asking for a credit card or a billing
+account just to demonstrate a synthetic-data pipeline. Free-tier terms were
+checked live against Render's own documentation on 2026-09-26, not from memory:
+750 free instance-hours/month, the instance spins down after 15 minutes with no
+inbound traffic, cold start is roughly one minute, and the filesystem is
+ephemeral — any writes are lost on every redeploy, restart, or spin-down (no
+persistent disk on the free instance type). Render's docs do not explicitly
+state whether prebuilt-image deploys are supported on the free instance type,
+but nothing found excludes it either — the Git-based and Docker-based deploy
+docs both point to the same free-tier limitations page, and the "Free web
+services" limitation list restricts disk, hours, scaling, and shell access, not
+deploy source.
+
+**Decision.** Deploy to Render, free instance type, from a prebuilt image
+pushed to GHCR by CI. CI triggers a redeploy via Render's deploy hook, passing
+`imgURL=<new digest>` so Render pulls the exact image CI just pushed rather than
+whatever tag was last configured in the dashboard.
+
+**Rationale.** No card, no billing account, deploy-hook-driven redeploy fits
+the existing CI shape, and the free tier's own limitations (ephemeral
+filesystem, spin-down) already match this repo's stated scope — a
+demonstrator, not a system of record.
+
+**Counter-argument.** Fly.io's pricing page (checked 2026-09-26) shows no free
+tier: every organization needs a credit card on file, and one small
+shared-cpu machine with 256 MB costs roughly $2.59/month. Google Cloud Run
+needs a project with billing enabled, with its free tier applying inside it;
+that was not re-verified on the pricing page when this was written. Both give
+more control (always-on, a real disk) than Render's free tier, and that
+control was traded away here to avoid putting a payment method on file for a
+synthetic-data demo.
+
+---
+
+## D9. KPI store stays ephemeral on this deployment
+
+**Context.** `kpi_store.py` persists a SQLite ledger at `SURGICAL_FHIR_KPI_DB`
+(default `governance_kpis.db`). Render's free instance type has no persistent
+disk (D8): that file is recreated empty on every redeploy, restart, or
+15-minute spin-down.
+
+**Decision.** Accept this. No paid Render disk, no external managed database,
+is added to keep KPI history across restarts on this deployment.
+
+**Rationale.** This matches the repo's existing scope-honesty stance — `store.py`
+is already documented as in-memory with no persistence (`ARCHITECTURE.md §6`).
+Extending that same honesty to the KPI ledger on this specific host, rather
+than quietly implying it is durable, is consistent with the rest of this
+project's posture.
+
+**Counter-argument.** KPI trend history — the one thing the store exists to
+accumulate across runs — resets on every spin-down, which undercuts the
+"governance over time" pitch for exactly the deployment meant to demonstrate
+it.
