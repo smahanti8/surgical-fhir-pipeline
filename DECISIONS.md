@@ -121,3 +121,29 @@ the pipeline counts its own output and the numbers were read.
 
 **Counter-argument.** Docstrings plus code review should catch this class of
 bug. They didn't — which is the point of the entry.
+
+---
+
+## D7. BDD specs via pytest-bdd for four invariants only, not the full suite
+
+**Context.** The test suite enforces its invariants correctly, but nothing in
+`tests/` is readable by a non-engineer reviewing what the pipeline actually
+guarantees — a governance auditor reading `test_unmapped_case_is_dropped_entirely`
+has to read Python to know what it asserts.
+
+**Decision.** Add `pytest-bdd` and four Gherkin feature files, covering
+exactly the four invariants named for this chapter: unmapped procedure code
+drops the case (D1), missing laterality on a sided procedure drops the case
+(D2), an out-of-range physiological reading is never emitted as a final
+Observation, and no raw MRN appears in output. Step definitions call
+`mapping.py` and `quality.py` directly; they do not duplicate that logic.
+
+**Rationale.** A product-readable specification for the four invariants a
+reviewer is most likely to ask about, without introducing a second
+implementation of pipeline behaviour — the Gherkin text is a label over
+existing assertions, not a parallel path that could drift from them.
+
+**Counter-argument.** Two testing paradigms in one repo is cognitive
+overhead; a determined skeptic could argue pytest already covers this exact
+behaviour and Gherkin adds a translation layer that can go stale if a step
+definition is ever loosened to stop calling the real functions.
