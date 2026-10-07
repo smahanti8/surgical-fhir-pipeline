@@ -1,6 +1,6 @@
 -r requirements.txt
 
-pytest>=8.0
+pytest>=9.1.1
 pytest-bdd==8.1.0
 httpx>=0.27
 bandit==1.9.4
