@@ -23,8 +23,11 @@ The value lives in three layers:
 ## Commands
 
 ```bash
-# Install
+# Install (runtime only)
 pip install -r requirements.txt
+
+# Install (runtime + test/lint/scan tooling)
+pip install -r requirements-dev.txt
 
 # Run all tests (must pass before every commit)
 PYTHONPATH=src pytest tests/ -q
