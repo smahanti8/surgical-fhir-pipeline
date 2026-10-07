@@ -149,6 +149,34 @@ def test_report_reconciles():
     assert report.cases_dropped > 0, "generator must exercise the drop path"
 
 
+def test_pipeline_is_reproducible():
+    """Guards the seed=42 default's determinism guarantee.
+
+    Checks that generate_cases -> build_report -> to_transaction_bundle
+    produces an identical QualityReport and an identical serialized
+    transaction bundle for the same seed. seed=43 is checked to differ, so
+    this test cannot pass by comparing two constants.
+
+    Limitation: this only compares two runs inside one process. It would not
+    catch a source of nondeterminism that depends on cross-process state
+    (e.g. PYTHONHASHSEED-driven dict/set ordering that happens to be stable
+    within a process but varies between them).
+    """
+
+    def _run(seed: int):
+        cases = generate_cases(n=25, seed=seed)
+        report, resources = build_report(cases)
+        return report, to_transaction_bundle(resources).model_dump_json()
+
+    first_report, first_bundle = _run(42)
+    second_report, second_bundle = _run(42)
+    assert first_report == second_report, "seed=42 report is not reproducible within one process"
+    assert first_bundle == second_bundle, "seed=42 bundle is not reproducible within one process"
+
+    different_report, different_bundle = _run(43)
+    assert different_bundle != first_bundle, "seed=43 must differ, or this test is vacuous"
+
+
 # ------------------------------------------------------------ API conformance
 
 
