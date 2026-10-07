@@ -9,7 +9,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements-dev.txt
-      - run: pytest -q
+      - run: pytest -q --cov=surgical_fhir --cov-report=term-missing --cov-fail-under=93
       - run: bandit -r src/
       - run: mypy src/
       - name: Pipeline must stay reproducible

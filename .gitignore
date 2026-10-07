@@ -8,3 +8,4 @@ output/
 notes/
 .claude/settings.local.json
 governance_kpis.db
+.coverage
