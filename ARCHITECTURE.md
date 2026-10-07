@@ -60,6 +60,12 @@ src/surgical_fhir/
 │   ~8% unmapped codes, ~4% missing laterality, ~6% out-of-range physio.
 │   ONLY used in tests and scripts — never imported by pipeline modules.
 │
+├── trust_status.py     [Trust primitives — isolated for reuse]
+│   BindingStatus, Binding, UnmappedConceptError, split out of terminology.py
+│   so a downstream consumer (e.g. prior-auth-agent) can reason about binding
+│   trust without importing the SNOMED/LOINC dictionaries. terminology.py
+│   re-exports all three for callers that already import it that way.
+│
 ├── terminology.py      [Terminology Service]
 │   ╔═══════════════════════════════════════════════════════════╗
 │   ║  THE MOST CRITICAL MODULE. Every binding has a trust.    ║
@@ -75,11 +81,27 @@ src/surgical_fhir/
 │   physio becomes entered-in-error with value removed.
 │   Output: MappingResult per case (resources + issues), to_transaction_bundle.
 │
+├── provenance.py       [Provenance Generator]
+│   One Provenance resource per mapped case: pipeline as agent, the OR
+│   Platform record as origin entity, each terminology binding used as a
+│   source entity carrying its trust status (machine-readable via a local
+│   extension, human-readable via entity.what.display as fallback).
+│   Only generates the resource — loading it into the store and serving it
+│   are api.py's concern (see 4.3; reachable only via $everything today).
+│
 ├── quality.py          [Governance Layer]
 │   Consumes all MappingResults → QualityReport.
 │   First-class deliverable, not a byproduct.
 │   Reports: total cases, exchangeable, dropped, resource counts by type,
 │   binding trust breakdown, sample MappingIssues.
+│
+├── kpi_store.py        [Governance KPI Ledger]
+│   Persists per-run QualityReport metrics (exchangeable rate, trust-mix
+│   counts, drop reasons) to a local SQLite file, so a reviewer sees a trend
+│   across runs, not just the latest snapshot. Path configurable via
+│   SURGICAL_FHIR_KPI_DB. Scalar metrics are flat columns; per-run
+│   categorical breakdowns (drop_reasons, issues_by_severity) are JSON
+│   columns, since their keys vary by run.
 │
 ├── store.py            [In-Memory FHIR Store]
 │   ╔═══════════════════════════════════════════════╗
@@ -93,6 +115,9 @@ src/surgical_fhir/
     FastAPI. Read-only: GET /{resource_type}/{id}, GET /{resource_type} (search).
     GET /metadata → CapabilityStatement.
     GET /quality-report → QualityReport.
+    GET /governance-kpis → KPIStore trend (JSON), across runs.
+    GET /Encounter/{id}/$everything → single-case Bundle including Provenance
+    (Provenance is not itself a searchable/gettable resource type — see 4.3).
     Returns OperationOutcome on errors.
     No auth. No write endpoints. No conditional operations.
 ```
@@ -172,12 +197,21 @@ to_transaction_bundle(result: MappingResult) -> dict
 | GET | `/{resource_type}` | searchset Bundle | 200, 400 (unsupported param) |
 | GET | `/{resource_type}/{id}` | resource or OperationOutcome | 200, 404 |
 | GET | `/quality-report` | QualityReport (JSON) | 200 |
+| GET | `/governance-kpis` | KPIStore trend across runs (JSON) | 200 |
+| GET | `/Encounter/{id}/$everything` | single-case Bundle, including Provenance | 200, 404 |
 
-Supported resource types: `Procedure`, `Observation`, `Patient`, `Encounter`, `Device`
+Supported resource types (direct GET/search): `Procedure`, `Observation`, `Patient`, `Encounter`, `Device`
 
-Supported search parameters: `patient` (on Observation), `code` (on Observation)
+Supported search parameters (per type, not shared): `Encounter` — `subject`, `patient`,
+`status`; `Procedure` — `subject`, `patient`, `encounter`, `code`, `status`; `Observation` —
+`subject`, `patient`, `encounter`, `code`, `status`; every type also accepts `_count`.
 
 All other search parameters → 400 OperationOutcome (by design — see DECISIONS.md D4)
+
+`Provenance` is generated (`provenance.py`) and stored, but is **not** in the supported
+resource-type list above — it has no direct `GET /Provenance` or `GET /Provenance/{id}`, and
+is reachable only by inclusion in `$everything`. This is a known, documented coverage gap
+(see `TEST_STRATEGY.md`'s coverage-gaps section), not an oversight here.
 
 ---
 
