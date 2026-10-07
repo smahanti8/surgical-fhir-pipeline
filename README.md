@@ -130,7 +130,8 @@ PYTHONPATH=src python scripts/generate.py -n 25
 # Serve the FHIR API
 PYTHONPATH=src uvicorn surgical_fhir.api:app --reload
 
-# Run all 57 tests
+# Run all 57 tests (needs the dev requirements: pytest, pytest-bdd, httpx and the CI tooling)
+pip install -r requirements-dev.txt
 PYTHONPATH=src pytest tests/ -q
 ```
 
