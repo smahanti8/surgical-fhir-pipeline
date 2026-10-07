@@ -145,6 +145,6 @@ architectural), adding tests, updating documentation.
 | System boundaries, component model, interfaces | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Domain model, bounded contexts, ubiquitous language | [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) |
 | Every design decision with counter-argument | [`DECISIONS.md`](DECISIONS.md) |
-| Test philosophy and coverage gaps | [`TEST_STRATEGY.md`](TEST_STRATEGY.md) *(coming)* |
-| Threat model and security posture | [`SECURITY.md`](SECURITY.md) *(coming)* |
+| Test philosophy and coverage gaps | [`TEST_STRATEGY.md`](TEST_STRATEGY.md) |
+| Threat model and security posture | [`SECURITY.md`](SECURITY.md) |
 | Sample quality report output | [`docs/sample-quality-report.txt`](docs/sample-quality-report.txt) |
