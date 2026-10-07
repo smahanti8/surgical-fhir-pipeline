@@ -3,7 +3,7 @@
 ![CI](https://github.com/smahanti8/surgical-fhir-pipeline/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![FHIR](https://img.shields.io/badge/FHIR-R4B-purple)
-![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-57%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 > A transparent, governance-first pipeline that maps **robotic-assisted surgery (RAS) telemetry** to **FHIR R4B** clinical exchange format — and reports honestly on what breaks along the way.
@@ -130,7 +130,7 @@ PYTHONPATH=src python scripts/generate.py -n 25
 # Serve the FHIR API
 PYTHONPATH=src uvicorn surgical_fhir.api:app --reload
 
-# Run all 56 tests
+# Run all 57 tests
 PYTHONPATH=src pytest tests/ -q
 ```
 
