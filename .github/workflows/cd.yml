@@ -1,0 +1,46 @@
+name: CD
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    # The secrets context is not available in step-level `if:`, so the secret
+    # is exposed as an env var here and the steps test env.RENDER_DEPLOY_HOOK_URL.
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+      # Render's deploy hook accepts imgURL=<tag-or-digest> to redeploy a
+      # specific image; every other part of imgURL must match the image
+      # already configured on the Render service (D8 in DECISIONS.md).
+      - name: Trigger Render deploy
+        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST \
+            "${RENDER_DEPLOY_HOOK_URL}&imgURL=ghcr.io/${GITHUB_REPOSITORY}@${DIGEST}"
+      - name: Render deploy hook not configured
+        if: ${{ env.RENDER_DEPLOY_HOOK_URL == '' }}
+        run: |
+          echo "::notice::RENDER_DEPLOY_HOOK_URL is not set yet — image was pushed to GHCR but no deploy was triggered. See docs/DEPLOYMENT.md."
