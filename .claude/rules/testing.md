@@ -79,13 +79,16 @@ PYTHONPATH=src pytest tests/ -v
 PYTHONPATH=src pytest tests/test_pipeline.py::test_referential_integrity_no_orphan_resources -v
 ```
 
-The CI reproducibility check also runs:
-```bash
-PYTHONPATH=src python scripts/generate.py -n 25 > /tmp/out1.txt
-PYTHONPATH=src python scripts/generate.py -n 25 > /tmp/out2.txt
-diff /tmp/out1.txt /tmp/out2.txt
-```
-This must produce no diff.
+The CI reproducibility check is the "Pipeline must stay reproducible" step in
+`.github/workflows/ci.yml`. It runs `scripts/generate.py -n 25` twice into
+separate output directories, each against its own throwaway KPI database
+(`SURGICAL_FHIR_KPI_DB`), then diffs the three output files and the stdout
+log. One log line, `KPI run persisted: <run id>`, differs on every run by
+design (the run id is meant to be unique), so the step excludes exactly that
+line from the log diff and asserts it appears once per run. Everything else
+must be identical. To reproduce it locally, run that step's script from
+`ci.yml`; a plain `diff` of two raw stdout captures will always fail on the
+run-id line.
 
 ---
 

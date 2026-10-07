@@ -90,19 +90,27 @@ none of the other five test what does *not* appear in a resource.
   runs with `seed=42`, and that `seed=43` differs from both, so the test
   cannot pass by comparing two constants. It only compares runs inside a
   single process, so it would not catch a source of nondeterminism that
-  depends on cross-process state, such as hash-order effects. Today, CI's
-  own reproducibility check runs `scripts/generate.py -n 25` once and does
-  not compare it against a second run — this test covers the pipeline
-  functions directly, but closing the equivalent gap in CI itself is a
-  separate, not-yet-done piece of work.
+  depends on cross-process state, such as hash-order effects. CI's
+  reproducibility step is the complement: it runs `scripts/generate.py
+  -n 25` twice as separate processes, each against its own throwaway KPI
+  database, and diffs the three output files and the stdout log. The one
+  log line that differs by design, `KPI run persisted: <run id>`, is
+  excluded from the diff, and the step asserts it appears exactly once per
+  run so the filter cannot quietly start hiding real differences. Two
+  separate processes can surface cross-process differences that this
+  in-process test cannot.
 
 ---
 
 ## Coverage gaps — stated honestly
 
 This list is partial. It was found through direct inspection of `tests/`
-while writing this document, not the output of a coverage tool — it names
-what is absent, not everything that could be tested.
+while writing this document, before a coverage tool ran in CI — it names
+what is absent, not everything that could be tested. Cross-check it against
+`pytest --cov=surgical_fhir --cov-report=term-missing`, which may show
+additional or narrower gaps. At adoption the measured total was 93.11%
+(CI fails below a floor of 93%), with the lowest modules `quality.py` at
+70%, `store.py` at 75% and `terminology.py` at 88%.
 
 1. **`fullUrl` is never asserted on.** `to_transaction_bundle`
    (`mapping.py:549`) sets each Bundle entry's `fullUrl` to
