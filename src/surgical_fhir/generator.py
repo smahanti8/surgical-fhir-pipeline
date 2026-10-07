@@ -210,5 +210,7 @@ def generate_case(rng: random.Random, index: int) -> SurgicalCase:
 
 def generate_cases(n: int = 25, seed: int = 42) -> list[SurgicalCase]:
     """Deterministic by default. Reproducibility is a regulated-domain habit."""
-    rng = random.Random(seed)
+    # Synthetic case data only, never security-sensitive: a seeded PRNG is the
+    # point here (reproducibility), not a cryptographic use of random.
+    rng = random.Random(seed)  # nosec B311
     return [generate_case(rng, i + 1) for i in range(n)]
