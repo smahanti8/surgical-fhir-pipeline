@@ -1,9 +1,11 @@
 """Trust-status primitives for terminology bindings.
 
-Isolated from the full terminology lookup tables so that downstream consumers
-(e.g. a prior-auth-agent) can reason about binding trust without importing the
-SNOMED/LOINC dictionaries. Import this module directly when you only need
-BindingStatus, Binding, or UnmappedConceptError.
+Isolated from the full terminology lookup tables so that code which only needs
+to reason about binding trust can do so without importing the SNOMED/LOINC
+dictionaries. Nothing outside this repo imports it today; sharing it with
+prior-auth-agent was considered and declined (see the README roadmap). Import
+this module directly when you only need BindingStatus, Binding, or
+UnmappedConceptError.
 
 terminology.py re-exports all three for callers that already use that import.
 """

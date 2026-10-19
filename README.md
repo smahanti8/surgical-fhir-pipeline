@@ -158,7 +158,7 @@ curl "localhost:8000/Procedure?performer=Dr-X"        # → OperationOutcome 400
 |---|---|
 | ✅ | Governance KPI store — per-run exchangeability and trust-mix trend, persisted to SQLite |
 | ✅ | `/governance-kpis` — machine-readable KPI trend endpoint |
-| ✅ | `trust_status.py` — BindingStatus, Binding, UnmappedConceptError isolated for prior-auth-agent reuse |
+| ✅ | `trust_status.py` — BindingStatus, Binding, UnmappedConceptError in their own module, importable without the terminology tables. Nothing outside this repo uses it today; sharing it with `prior-auth-agent` was considered and declined (see the roadmap table below) |
 | ✅ | `Provenance` resource per mapped case, recording binding trust status (PROVISIONAL/VERIFIED) |
 | ✅ | `GET /Encounter/{id}/$everything` — single-case bundle including Provenance |
 

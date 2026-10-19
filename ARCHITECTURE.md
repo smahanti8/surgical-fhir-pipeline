@@ -62,9 +62,12 @@ src/surgical_fhir/
 │
 ├── trust_status.py     [Trust primitives — isolated for reuse]
 │   BindingStatus, Binding, UnmappedConceptError, split out of terminology.py
-│   so a downstream consumer (e.g. prior-auth-agent) can reason about binding
-│   trust without importing the SNOMED/LOINC dictionaries. terminology.py
-│   re-exports all three for callers that already import it that way.
+│   so code that only needs to reason about binding trust does not have to
+│   import the SNOMED/LOINC dictionaries. Nothing outside this repo imports it
+│   today: prior-auth-agent was considered as a consumer and extraction into
+│   a shared package was declined (its DECISIONS.md D11; see the README
+│   roadmap). terminology.py re-exports all three for callers that already
+│   import it that way.
 │
 ├── terminology.py      [Terminology Service]
 │   ╔═══════════════════════════════════════════════════════════╗
