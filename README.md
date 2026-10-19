@@ -66,9 +66,15 @@ flowchart TD
         BUNDLE["Transaction Bundle — idempotent PUT\nPatient · Encounter · Procedure\nDevice · Observation"]
     end
 
-    BUNDLE --> API["FastAPI FHIR REST API\n/metadata · /Procedure · /Observation"]
+    BUNDLE --> STORE["store.py\nIn-memory FHIR store — not a FHIR server"]
+    BUNDLE --> PROV["provenance.py\nOne Provenance per mapped case\nrecords each binding's trust status"]
+    PROV --> STORE
+    STORE --> API["FastAPI FHIR REST API\n/metadata · search + read by type\n/Encounter/{id}/$everything (scoped, incl. Provenance)"]
     BUNDLE --> QR["📊 Quality Report\n20/25 exchangeable · 5/11 bindings verified"]
     DROP --> QR
+    QR -- "/quality-report" --> API
+    QR --> KPI["kpi_store.py\nPer-run metrics persisted to SQLite"]
+    KPI -- "/governance-kpis" --> API
 
     style DROP fill:#f0605d,color:#fff,stroke:#c0392b
     style ERR fill:#f0a83c,color:#000,stroke:#e67e22
