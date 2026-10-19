@@ -202,11 +202,17 @@ to_transaction_bundle(result: MappingResult) -> dict
 
 Supported resource types (direct GET/search): `Procedure`, `Observation`, `Patient`, `Encounter`, `Device`
 
-Supported search parameters (per type, not shared): `Encounter` — `subject`, `patient`,
-`status`; `Procedure` — `subject`, `patient`, `encounter`, `code`, `status`; `Observation` —
-`subject`, `patient`, `encounter`, `code`, `status`; every type also accepts `_count`.
+Search parameters advertised in the CapabilityStatement (per type): `Encounter` —
+`subject`, `patient`, `status`; `Procedure` — `subject`, `patient`, `encounter`, `code`,
+`status`; `Observation` — `subject`, `patient`, `encounter`, `code`, `status`; `Patient` and
+`Device` — none beyond `_count`; every type also accepts `_count`.
 
-All other search parameters → 400 OperationOutcome (by design — see DECISIONS.md D4)
+Enforcement is looser than the advertisement. `store.search` validates against one set shared
+by every resource type (`subject`, `patient`, `encounter`, `code`, `status`, `_count`), so a
+parameter in that set is accepted for any type even where the CapabilityStatement does not
+advertise it: `GET /Patient?status=active` returns 200 with no results, not 400. Anything
+outside the shared set → 400 OperationOutcome (by design — see DECISIONS.md D4).
+`TEST_STRATEGY.md` records the missing per-type test as a known coverage gap.
 
 `Provenance` is generated (`provenance.py`) and stored, but is **not** in the supported
 resource-type list above — it has no direct `GET /Provenance` or `GET /Provenance/{id}`, and
